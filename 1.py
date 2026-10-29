@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════╗
-║     TG BROADCASTER — Telethon (с бесконечным режимом) ║
+║   TG BROADCASTER — Telethon (фото + бесконечный)     ║
 ║  Установка:  pip install telethon                    ║
 ║  Запуск:     python bot.py                           ║
 ╚══════════════════════════════════════════════════════╝
@@ -41,6 +41,7 @@ DELAY_MAX = 30
 
 # ── Логи ──────────────────────────────────────────────
 os.makedirs("data", exist_ok=True)
+os.makedirs("data/media", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -78,7 +79,8 @@ def db_init():
                 status     TEXT DEFAULT 'stopped',
                 sent       INTEGER DEFAULT 0,
                 errors     INTEGER DEFAULT 0,
-                loop       INTEGER DEFAULT 0
+                loop       INTEGER DEFAULT 0,
+                media      TEXT DEFAULT NULL
             );
             CREATE TABLE IF NOT EXISTS chats (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,10 +91,12 @@ def db_init():
                 status   TEXT DEFAULT 'pending'
             );
         """)
-        # Миграция для старых БД
+        # Миграции для старых БД
         cols = [r[1] for r in c.execute("PRAGMA table_info(tasks)").fetchall()]
         if "loop" not in cols:
             c.execute("ALTER TABLE tasks ADD COLUMN loop INTEGER DEFAULT 0")
+        if "media" not in cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN media TEXT DEFAULT NULL")
 
 def db_add_account(phone):
     with db_conn() as c:
@@ -125,11 +129,11 @@ def db_delete_account(phone):
     with db_conn() as c:
         c.execute("DELETE FROM accounts WHERE phone=?", (phone,))
 
-def db_create_task(account_id, text, chats, delay_min, delay_max, loop=False):
+def db_create_task(account_id, text, chats, delay_min, delay_max, loop=False, media=None):
     with db_conn() as c:
         cur = c.execute(
-            "INSERT INTO tasks (account_id,text,delay_min,delay_max,loop) VALUES (?,?,?,?,?)",
-            (account_id, text, delay_min, delay_max, 1 if loop else 0)
+            "INSERT INTO tasks (account_id,text,delay_min,delay_max,loop,media) VALUES (?,?,?,?,?,?)",
+            (account_id, text, delay_min, delay_max, 1 if loop else 0, media)
         )
         task_id = cur.lastrowid
         for ch in chats:
@@ -189,7 +193,6 @@ def db_mark_chat_done(chat_row_id):
         c.execute("UPDATE chats SET status='done' WHERE id=?", (chat_row_id,))
 
 def db_reset_chats(task_id):
-    """Сбрасывает все чаты задачи обратно в pending — для нового круга."""
     with db_conn() as c:
         c.execute("UPDATE chats SET status='pending' WHERE task_id=?", (task_id,))
 
@@ -405,7 +408,14 @@ def parse_chat_links(links: list[str]) -> list[dict]:
             })
     return result
 
-async def broadcast(client: TelegramClient, task_id: int, text: str, delay_min: int, delay_max: int, done_cb):
+async def _send_one(client, target, text, media):
+    """Отправляет одно сообщение — с фото (caption=text) или только текст."""
+    if media and os.path.exists(media):
+        await client.send_file(target, media, caption=text)
+    else:
+        await client.send_message(target, text)
+
+async def broadcast(client: TelegramClient, task_id: int, text: str, media, delay_min: int, delay_max: int, done_cb):
     """Рассылка. Если у задачи loop=1 — крутится бесконечно до остановки."""
     total_sent = 0
     total_errors = 0
@@ -422,7 +432,6 @@ async def broadcast(client: TelegramClient, task_id: int, text: str, delay_min: 
                 if task and task["loop"]:
                     db_reset_chats(task_id)
                     log.info(f"[{task_id}] 🔁 Круг завершён, начинаем заново")
-                    # пауза между кругами — из тех же задержек
                     await asyncio.sleep(random.randint(delay_min, delay_max))
                     continue
                 else:
@@ -437,7 +446,7 @@ async def broadcast(client: TelegramClient, task_id: int, text: str, delay_min: 
 
                 target = chat.get("username") or chat["chat_id"]
                 try:
-                    await client.send_message(target, text)
+                    await _send_one(client, target, text, media)
                     sent += 1
                     total_sent += 1
                     db_inc_sent(task_id)
@@ -447,7 +456,7 @@ async def broadcast(client: TelegramClient, task_id: int, text: str, delay_min: 
                     log.warning(f"[{task_id}] FloodWait {e.seconds}s")
                     await asyncio.sleep(e.seconds + 5)
                     try:
-                        await client.send_message(target, text)
+                        await _send_one(client, target, text, media)
                         sent += 1
                         total_sent += 1
                         db_inc_sent(task_id)
@@ -477,7 +486,7 @@ async def broadcast(client: TelegramClient, task_id: int, text: str, delay_min: 
                     log.warning(f"[{task_id}] SlowModeWait {e.seconds}s")
                     await asyncio.sleep(e.seconds + 2)
                     try:
-                        await client.send_message(target, text)
+                        await _send_one(client, target, text, media)
                         sent += 1
                         total_sent += 1
                         db_inc_sent(task_id)
@@ -495,7 +504,6 @@ async def broadcast(client: TelegramClient, task_id: int, text: str, delay_min: 
                 if i < total - 1 and task_id in running_tasks:
                     await asyncio.sleep(random.randint(delay_min, delay_max))
 
-            # после круга проверяем loop
             task = db_get_task(task_id)
             if not task or not task["loop"]:
                 break
@@ -552,9 +560,10 @@ def tasks_keyboard():
     for t in tasks:
         icon = icons.get(t["status"], "❓")
         loop_icon = "🔁 " if t.get("loop") else ""
+        media_icon = "📷 " if t.get("media") else ""
         buttons.append([
             Button.inline(
-                f"{loop_icon}{icon} Задача #{t['id']} (✅{t['sent']} ❌{t['errors']})",
+                f"{loop_icon}{media_icon}{icon} Задача #{t['id']} (✅{t['sent']} ❌{t['errors']})",
                 f"task_detail_{t['id']}".encode()
             )
         ])
@@ -587,11 +596,13 @@ def task_detail_text(task: dict) -> str:
     acc = db_get_account_by_id(task["account_id"])
     phone = acc["phone"] if acc else "Не привязан"
     live = task["id"] in running_tasks
+    media_str = "📷 есть" if task.get("media") else "❌ нет"
     return (
         f"📊 **Задача #{task['id']}**\n\n"
         f"📱 Аккаунт: `{phone}`\n"
         f"Статус: `{task['status']}`\n"
         f"Режим: {'🔁 бесконечно' if task['loop'] else '1️⃣ один раз'}\n"
+        f"Фото: {media_str}\n"
         f"Отправлено: `{task['sent']}`\n"
         f"Ошибок: `{task['errors']}`\n"
         f"Интервал: `{task['delay_min']}–{task['delay_max']} сек`\n"
@@ -607,8 +618,7 @@ HELP_TEXT = """
 🤖 **TG Broadcaster Bot**
 
 👥 Все администраторы из конфига (`ADMIN_IDS`) работают с **общими**
-аккаунтами и задачами — что добавил/создал один, видят и могут
-запускать/останавливать все остальные.
+аккаунтами и задачами.
 
 📱 **Управление аккаунтами:**
 Нажмите **«➕ Добавить аккаунт»** и введите номер телефона,
@@ -616,12 +626,13 @@ HELP_TEXT = """
 
 📨 **Создание рассылки:**
 1. Нажмите **«➕ Создать задачу»**.
-2. Введите рекламный текст.
-3. Укажите список чатов/получателей.
-4. Настройте задержки.
-5. В карточке задачи переключите режим **🔁 бесконечно** (если нужно
-   крутить рассылку по кругу до нажатия «Остановить») или оставьте
-   **1️⃣ один раз**.
+2. Выберите аккаунт (или «без аккаунта»).
+3. Введите рекламный текст.
+4. Отправьте **фото** (или нажмите «⏭ Пропустить»).
+5. Укажите список чатов/получателей.
+6. Настройте задержки.
+7. В карточке задачи переключите режим **🔁 бесконечно** (если нужно
+   крутить по кругу до нажатия «Остановить»).
 """
 
 def register_handlers(bot: TelegramClient):
@@ -772,13 +783,17 @@ def register_handlers(bot: TelegramClient):
 
             chats = db_get_pending_chats(task_id)
             if not chats:
-                # если loop и все чаты done — сбрасываем
                 if task["loop"]:
                     db_reset_chats(task_id)
                     chats = db_get_pending_chats(task_id)
                 if not chats:
                     await e.answer("Нет доступных чатов для рассылки!", alert=True)
                     return
+
+            media = task.get("media")
+            if media and not os.path.exists(media):
+                await e.answer(f"⚠️ Файл фото не найден: {media}", alert=True)
+                return
 
             db_set_task_status(task_id, "running")
 
@@ -795,7 +810,7 @@ def register_handlers(bot: TelegramClient):
                         log.warning(f"Не удалось отправить уведомление админу {admin_id}: {ex}")
 
             t = asyncio.create_task(
-                broadcast(client, task_id, task["text"],
+                broadcast(client, task_id, task["text"], media,
                           task["delay_min"], task["delay_max"], done_cb)
             )
             running_tasks[task_id] = t
@@ -804,6 +819,7 @@ def register_handlers(bot: TelegramClient):
             await e.edit(
                 f"🚀 **Задача #{task_id} запущена!**\n"
                 f"Режим: {'🔁 бесконечно' if task['loop'] else '1️⃣ один раз'}\n"
+                f"Фото: {'📷 есть' if media else '❌ нет'}\n"
                 f"Задержка: {task['delay_min']}–{task['delay_max']} сек",
                 buttons=task_action_keyboard(task_id)
             )
@@ -840,6 +856,19 @@ def register_handlers(bot: TelegramClient):
             states[uid] = {"state": "task_text", "acc": acc}
             await e.edit("✍️ Введите текст сообщения для рассылки:", buttons=cancel_keyboard())
 
+        elif data == "skip_media":
+            st = states.get(uid)
+            if st and st.get("state") == "task_media":
+                st["media"] = None
+                st["state"] = "task_chats"
+                await e.edit(
+                    "📂 Введите ссылки на чаты — каждый с новой строки:\n\n"
+                    "Пример:\n`@chat1`\n`@chat2`\n`https://t.me/group_name`",
+                    buttons=cancel_keyboard()
+                )
+            else:
+                await e.answer("Ошибка сессии создания задачи", alert=True)
+
         elif data == "delay_default":
             st = states.get(uid)
             if not st or st.get("state") != "task_delay":
@@ -848,18 +877,22 @@ def register_handlers(bot: TelegramClient):
 
             acc = st.get("acc")
             acc_id = acc["id"] if acc else None
-            task_id = db_create_task(acc_id, st["text"], st["chats"], DELAY_MIN, DELAY_MAX, loop=False)
+            task_id = db_create_task(
+                acc_id, st["text"], st["chats"], DELAY_MIN, DELAY_MAX,
+                loop=False, media=st.get("media")
+            )
             states.pop(uid, None)
             await e.edit(
                 f"✅ **Задача #{task_id} успешно создана!**\n\n"
                 f"📊 Чатов: {len(st['chats'])}\n"
+                f"📷 Фото: {'есть' if st.get('media') else 'нет'}\n"
                 f"⏱ Задержка по умолчанию: {DELAY_MIN}–{DELAY_MAX} сек\n"
                 f"📱 Аккаунт: {acc['phone'] if acc else 'Не выбран'}\n\n"
                 f"💡 Не забудь включить режим 🔁 бесконечно, если нужно крутить по кругу.",
                 buttons=task_action_keyboard(task_id)
             )
 
-    # Ввод текста (FSM)
+    # Ввод текста/файла (FSM)
     @bot.on(events.NewMessage())
     async def fsm_handler(e):
         if not is_admin(e.sender_id): return
@@ -969,12 +1002,48 @@ def register_handlers(bot: TelegramClient):
 
         elif step == "task_text":
             states[uid]["text"] = txt
-            states[uid]["state"] = "task_chats"
+            states[uid]["state"] = "task_media"
             await e.respond(
-                "📂 Введите ссылки на чаты — каждый с новой строки:\n\n"
-                "Пример:\n`@chat1`\n`@chat2`\n`https://t.me/group_name`",
-                buttons=cancel_keyboard()
+                "📷 **Отправьте фото для рассылки**\n\n"
+                "Пришлите одно фото (или видео/документ) — оно будет отправляться "
+                "вместе с текстом (caption).\n\n"
+                "Если фото не нужно — нажмите «⏭ Пропустить».",
+                buttons=[
+                    [Button.inline("⏭ Пропустить", b"skip_media")],
+                    [Button.inline("❌ Отмена", b"cancel_fsm")]
+                ]
             )
+
+        elif step == "task_media":
+            if e.photo or e.document or e.video:
+                msg = await e.respond("⏳ Скачиваем файл...")
+                try:
+                    path = await e.download_media(file="data/media/")
+                    states[uid]["media"] = path
+                    states[uid]["state"] = "task_chats"
+                    await msg.edit(
+                        f"✅ Фото сохранено: `{os.path.basename(path)}`\n\n"
+                        f"📂 Введите ссылки на чаты — каждый с новой строки:\n\n"
+                        f"Пример:\n`@chat1`\n`@chat2`\n`https://t.me/group_name`",
+                        buttons=cancel_keyboard()
+                    )
+                except Exception as ex:
+                    await msg.edit(
+                        f"❌ Не удалось скачать файл: `{ex}`\n\n"
+                        f"Попробуйте ещё раз или нажмите «⏭ Пропустить».",
+                        buttons=[
+                            [Button.inline("⏭ Пропустить", b"skip_media")],
+                            [Button.inline("❌ Отмена", b"cancel_fsm")]
+                        ]
+                    )
+            else:
+                await e.respond(
+                    "❌ Отправьте фото/видео/документ или нажмите «⏭ Пропустить».",
+                    buttons=[
+                        [Button.inline("⏭ Пропустить", b"skip_media")],
+                        [Button.inline("❌ Отмена", b"cancel_fsm")]
+                    ]
+                )
 
         elif step == "task_chats":
             links = [l.strip() for l in txt.splitlines() if l.strip()]
@@ -1010,11 +1079,15 @@ def register_handlers(bot: TelegramClient):
 
             acc = st.get("acc")
             acc_id = acc["id"] if acc else None
-            task_id = db_create_task(acc_id, st["text"], st["chats"], d_min, d_max, loop=False)
+            task_id = db_create_task(
+                acc_id, st["text"], st["chats"], d_min, d_max,
+                loop=False, media=st.get("media")
+            )
             states.pop(uid, None)
             await e.respond(
                 f"✅ **Задача #{task_id} успешно создана!**\n\n"
                 f"📊 Чатов: {len(st['chats'])}\n"
+                f"📷 Фото: {'есть' if st.get('media') else 'нет'}\n"
                 f"⏱ Задержка: {d_min}–{d_max} сек\n"
                 f"📱 Аккаунт: {acc['phone'] if acc else 'Не выбран'}\n\n"
                 f"💡 Не забудь включить режим 🔁 бесконечно, если нужно крутить по кругу.",
