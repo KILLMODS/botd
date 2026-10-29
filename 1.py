@@ -865,29 +865,33 @@ def register_handlers(bot: TelegramClient):
         db_get_or_create_user(e.sender_id)
         await e.respond(WELCOME_TEXT, buttons=main_menu_keyboard(e.sender_id))
 
-    # Обработка оплаты Telegram Stars
-    @bot.on(events.Raw(types.UpdateNewPreCheckoutQuery))
-    async def pre_checkout_handler(event):
-        await bot(functions.messages.SetBotPrecheckoutResultsRequest(
-            user_id=event.user_id,
-            query_id=event.query_id,
-            success=True
-        ))
-
-    @bot.on(events.Raw(types.UpdateMessageService))
-    async def service_message_handler(event):
-        if hasattr(event.message, 'action') and isinstance(event.message.action, types.MessageActionPaymentSentMe):
-            payment = event.message.action
-            payload = payment.payload.decode('utf-8') if isinstance(payment.payload, bytes) else str(payment.payload)
-            parts = payload.split("_")
-            if len(parts) >= 3 and parts[0] == "sub":
-                plan_name = parts[1]
-                user_id = int(parts[2])
-                db_update_user_sub(user_id, plan_name, 30)
-                try:
-                    await bot.send_message(user_id, f"🎉 **Подписка {plan_name.upper()} успешно оплачена через Telegram Stars и активирована на 30 дней!**", buttons=main_menu_keyboard(user_id))
-                except Exception as ex:
-                    log.error(f"Error notifying payment: {ex}")
+    # Обработка оплаты Telegram Stars через универсальный фильтр сырых событий
+    @bot.on(events.Raw)
+    async def raw_update_handler(event):
+        try:
+            # Пре-чекаут при покупке
+            if event.__class__.__name__ == 'UpdateBotPrecheckoutQuery':
+                await bot(functions.messages.SetBotPrecheckoutResultsRequest(
+                    user_id=event.user_id,
+                    query_id=event.query_id,
+                    success=True
+                ))
+            # Успешный платеж
+            elif event.__class__.__name__ == 'UpdateMessageService':
+                if hasattr(event.message, 'action') and isinstance(event.message.action, types.MessageActionPaymentSentMe):
+                    payment = event.message.action
+                    payload = payment.payload.decode('utf-8') if isinstance(payment.payload, bytes) else str(payment.payload)
+                    parts = payload.split("_")
+                    if len(parts) >= 3 and parts[0] == "sub":
+                        plan_name = parts[1]
+                        user_id = int(parts[2])
+                        db_update_user_sub(user_id, plan_name, 30)
+                        try:
+                            await bot.send_message(user_id, f"🎉 **Подписка {plan_name.upper()} успешно оплачена через Telegram Stars и активирована на 30 дней!**", buttons=main_menu_keyboard(user_id))
+                        except Exception as ex:
+                            log.error(f"Error notifying payment: {ex}")
+        except Exception as ex:
+            pass
 
     @bot.on(events.NewMessage(pattern=r"^/profile"))
     async def profile_cmd(e):
