@@ -32,7 +32,7 @@ API_ID    = int(os.environ.get("API_ID", "30973996"))          # ВАШ API ID
 API_HASH  = os.environ.get("API_HASH", "dc58ef881ea53b1faafcf6ad974306a7")  # ВАШ API HASH
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE")  # @BotFather
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "7459502130").split(",")]  # ваш Telegram ID
+ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "7459502130, 8658384308").split(",")]  # ваш Telegram ID
 
 # Таймаут "зависшей" авторизации (сек) — если юзер начал вводить номер/код и бросил
 AUTH_SESSION_TTL = 600
