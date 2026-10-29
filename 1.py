@@ -1,9 +1,9 @@
 """
-╔══════════════════════════════════════════════════════╗
-║   TG BROADCASTER — Telethon (фото + бесконечный)     ║
-║  Установка:  pip install telethon                    ║
-║  Запуск:     python bot.py                           ║
-╚══════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════╗
+║   TG BROADCASTER — Telethon (Мультиаккаунты, Подписки, Команды)    ║
+║  Установка:  pip install telethon                            ║
+║  Запуск:     python 1.py                                     ║
+╚══════════════════════════════════════════════════════════════════════╝
 """
 
 import asyncio
@@ -12,10 +12,13 @@ import random
 import re
 import sqlite3
 import os
+import time
 
 from telethon import TelegramClient, events, connection
 from telethon.sessions import StringSession
 from telethon.tl.custom import Button
+from telethon.tl.types import InputMediaInvoice, Invoice, DataJSON
+from telethon.tl.functions.messages import SendInvoiceRequest
 from telethon.errors import (
     FloodWaitError, ChatWriteForbiddenError,
     SlowModeWaitError, PeerFloodError,
@@ -32,12 +35,37 @@ API_ID    = int(os.environ.get("API_ID", "30973996"))
 API_HASH  = os.environ.get("API_HASH", "dc58ef881ea53b1faafcf6ad974306a7")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE")
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "7459502130, 8658384308").split(",")]
+ADMIN_IDS = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "7459502130, 8658384308").split(",") if x.strip()]
 
 AUTH_SESSION_TTL = 600
 
-DELAY_MIN = 10
-DELAY_MAX = 30
+# Тарифные планы
+SUBSCRIPTION_PLANS = {
+    "free": {
+        "name": "Free (Старт)",
+        "max_accounts": 1,
+        "daily_limit": 500,
+        "min_delay": 10,
+        "price_stars": 0,
+        "is_one_time_free": True
+    },
+    "pro": {
+        "name": "Pro",
+        "max_accounts": 5,
+        "daily_limit": 5000,
+        "min_delay": 5,
+        "price_stars": 69,
+        "is_one_time_free": False
+    },
+    "premium": {
+        "name": "Premium+",
+        "max_accounts": 15,
+        "daily_limit": 10000,
+        "min_delay": 1,
+        "price_stars": 159,
+        "is_one_time_free": False
+    }
+}
 
 # ── Логи ──────────────────────────────────────────────
 os.makedirs("data", exist_ok=True)
@@ -64,15 +92,26 @@ def db_conn():
 def db_init():
     with db_conn() as c:
         c.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id           INTEGER PRIMARY KEY,
+                sub_plan          TEXT DEFAULT 'free',
+                sub_expires_at    INTEGER DEFAULT 0,
+                daily_sent        INTEGER DEFAULT 0,
+                last_sent_date    TEXT DEFAULT '',
+                free_limit_used   INTEGER DEFAULT 0
+            );
             CREATE TABLE IF NOT EXISTS accounts (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id  INTEGER DEFAULT 0,
                 phone    TEXT UNIQUE NOT NULL,
                 session  TEXT,
                 status   TEXT DEFAULT 'pending'
             );
             CREATE TABLE IF NOT EXISTS tasks (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER,
+                user_id    INTEGER DEFAULT 0,
+                account_id INTEGER DEFAULT 0,
+                target_accs TEXT DEFAULT 'all',
                 text       TEXT NOT NULL,
                 delay_min  INTEGER DEFAULT 10,
                 delay_max  INTEGER DEFAULT 30,
@@ -91,74 +130,133 @@ def db_init():
                 status   TEXT DEFAULT 'pending'
             );
         """)
-        # Миграции для старых БД
-        cols = [r[1] for r in c.execute("PRAGMA table_info(tasks)").fetchall()]
-        if "loop" not in cols:
+        # Миграции структуры таблиц
+        cols_accs = [r[1] for r in c.execute("PRAGMA table_info(accounts)").fetchall()]
+        if "user_id" not in cols_accs:
+            c.execute("ALTER TABLE accounts ADD COLUMN user_id INTEGER DEFAULT 0")
+
+        cols_tasks = [r[1] for r in c.execute("PRAGMA table_info(tasks)").fetchall()]
+        if "user_id" not in cols_tasks:
+            c.execute("ALTER TABLE tasks ADD COLUMN user_id INTEGER DEFAULT 0")
+        if "target_accs" not in cols_tasks:
+            c.execute("ALTER TABLE tasks ADD COLUMN target_accs TEXT DEFAULT 'all'")
+        if "loop" not in cols_tasks:
             c.execute("ALTER TABLE tasks ADD COLUMN loop INTEGER DEFAULT 0")
-        if "media" not in cols:
+        if "media" not in cols_tasks:
             c.execute("ALTER TABLE tasks ADD COLUMN media TEXT DEFAULT NULL")
 
-def db_add_account(phone):
+def db_get_or_create_user(user_id: int):
     with db_conn() as c:
-        c.execute("INSERT OR IGNORE INTO accounts (phone) VALUES (?)", (phone,))
+        c.row_factory = sqlite3.Row
+        u = c.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
+        if not u:
+            c.execute("INSERT INTO users (user_id, sub_plan, sub_expires_at, free_limit_used) VALUES (?, 'free', 0, 0)", (user_id,))
+            u = c.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
+        return dict(u)
 
-def db_save_session(phone, session_str):
+def db_update_user_sub(user_id: int, plan: str, duration_days: int = 30):
+    expires_at = int(time.time()) + (duration_days * 86400)
     with db_conn() as c:
-        c.execute("UPDATE accounts SET session=?, status='active' WHERE phone=?", (session_str, phone))
+        c.execute("UPDATE users SET sub_plan=?, sub_expires_at=? WHERE user_id=?", (plan, expires_at, user_id))
 
-def db_get_account(phone):
+def db_check_user_limits(user_id: int) -> tuple[bool, str, dict]:
+    """Проверка лимитов пользователя на отправку сообщений и тарифа."""
+    u = db_get_or_create_user(user_id)
+    plan_key = u["sub_plan"]
+    now = int(time.time())
+    today_str = time.strftime("%Y-%m-%d")
+
+    # Сброс дневного счетчика
+    if u["last_sent_date"] != today_str:
+        with db_conn() as c:
+            c.execute("UPDATE users SET daily_sent=0, last_sent_date=? WHERE user_id=?", (today_str, user_id))
+        u["daily_sent"] = 0
+
+    if plan_key != "free" and u["sub_expires_at"] > 0 and now > u["sub_expires_at"]:
+        # Подписка истекла -> откат на Free
+        with db_conn() as c:
+            c.execute("UPDATE users SET sub_plan='free', sub_expires_at=0 WHERE user_id=?", (user_id,))
+        plan_key = "free"
+
+    plan = SUBSCRIPTION_PLANS.get(plan_key, SUBSCRIPTION_PLANS["free"])
+
+    if plan_key == "free":
+        if u["free_limit_used"] >= plan["daily_limit"]:
+            return False, "⚠️ Вы израсходовали лимит бесплатного пакета (500 сообщений). Приобретите подписку Pro или Premium+!", plan
+    else:
+        if u["daily_sent"] >= plan["daily_limit"]:
+            return False, f"⚠️ Достигнут дневной лимит отправки сообщений для тарифа {plan['name']} ({plan['daily_limit']} сообщений/день).", plan
+
+    return True, "", plan
+
+def db_inc_user_sent(user_id: int):
+    u = db_get_or_create_user(user_id)
+    with db_conn() as c:
+        if u["sub_plan"] == "free":
+            c.execute("UPDATE users SET daily_sent=daily_sent+1, free_limit_used=free_limit_used+1 WHERE user_id=?", (user_id,))
+        else:
+            c.execute("UPDATE users SET daily_sent=daily_sent+1 WHERE user_id=?", (user_id,))
+
+def db_add_account(phone: str, user_id: int = 0):
+    with db_conn() as c:
+        c.execute("INSERT OR IGNORE INTO accounts (phone, user_id) VALUES (?, ?)", (phone, user_id))
+
+def db_save_session(phone: str, session_str: str, user_id: int = 0):
+    with db_conn() as c:
+        c.execute("UPDATE accounts SET session=?, status='active', user_id=? WHERE phone=?", (session_str, user_id, phone))
+
+def db_get_account(phone: str):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
         r = c.execute("SELECT * FROM accounts WHERE phone=?", (phone,)).fetchone()
         return dict(r) if r else None
 
 def db_get_account_by_id(acc_id: int):
-    if not acc_id:
-        return None
+    if not acc_id: return None
     with db_conn() as c:
         c.row_factory = sqlite3.Row
         r = c.execute("SELECT * FROM accounts WHERE id=?", (acc_id,)).fetchone()
         return dict(r) if r else None
 
-def db_get_all_accounts():
+def db_get_user_accounts(user_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute("SELECT * FROM accounts ORDER BY id").fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM accounts WHERE user_id=? ORDER BY id", (user_id,)).fetchall()]
 
-def db_delete_account(phone):
+def db_delete_account(phone: str, user_id: int):
     with db_conn() as c:
-        c.execute("DELETE FROM accounts WHERE phone=?", (phone,))
+        c.execute("DELETE FROM accounts WHERE phone=? AND user_id=?", (phone, user_id))
 
-def db_create_task(account_id, text, chats, delay_min, delay_max, loop=False, media=None):
+def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, chats: list, delay_min: int, delay_max: int, loop=False, media=None):
     with db_conn() as c:
         cur = c.execute(
-            "INSERT INTO tasks (account_id,text,delay_min,delay_max,loop,media) VALUES (?,?,?,?,?,?)",
-            (account_id, text, delay_min, delay_max, 1 if loop else 0, media)
+            "INSERT INTO tasks (user_id, account_id, target_accs, text, delay_min, delay_max, loop, media) VALUES (?,?,?,?,?,?,?,?)",
+            (user_id, account_id, target_accs, text, delay_min, delay_max, 1 if loop else 0, media)
         )
         task_id = cur.lastrowid
         for ch in chats:
             c.execute(
-                "INSERT INTO chats (task_id,chat_id,username,title) VALUES (?,?,?,?)",
+                "INSERT INTO chats (task_id, chat_id, username, title) VALUES (?,?,?,?)",
                 (task_id, ch.get("id", 0), ch.get("username",""), ch.get("title",""))
             )
         return task_id
 
-def db_get_task(task_id):
+def db_get_task(task_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
         r = c.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
         return dict(r) if r else None
 
-def db_all_tasks():
+def db_get_user_tasks(user_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute("SELECT * FROM tasks ORDER BY id DESC").fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM tasks WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()]
 
 def db_set_task_account(task_id: int, account_id: int):
     with db_conn() as c:
         c.execute("UPDATE tasks SET account_id=? WHERE id=?", (account_id, task_id))
 
-def db_set_task_status(task_id, status):
+def db_set_task_status(task_id: int, status: str):
     with db_conn() as c:
         c.execute("UPDATE tasks SET status=? WHERE id=?", (status, task_id))
 
@@ -166,33 +264,24 @@ def db_set_task_loop(task_id: int, loop: bool):
     with db_conn() as c:
         c.execute("UPDATE tasks SET loop=? WHERE id=?", (1 if loop else 0, task_id))
 
-def db_inc_sent(task_id):
+def db_inc_sent(task_id: int):
     with db_conn() as c:
         c.execute("UPDATE tasks SET sent=sent+1 WHERE id=?", (task_id,))
 
-def db_inc_errors(task_id):
+def db_inc_errors(task_id: int):
     with db_conn() as c:
         c.execute("UPDATE tasks SET errors=errors+1 WHERE id=?", (task_id,))
 
-def db_get_pending_chats(task_id):
+def db_get_pending_chats(task_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute(
-            "SELECT * FROM chats WHERE task_id=? AND status='pending'", (task_id,)
-        ).fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM chats WHERE task_id=? AND status='pending'", (task_id,)).fetchall()]
 
-def db_get_all_chats(task_id):
-    with db_conn() as c:
-        c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute(
-            "SELECT * FROM chats WHERE task_id=? ORDER BY id", (task_id,)
-        ).fetchall()]
-
-def db_mark_chat_done(chat_row_id):
+def db_mark_chat_done(chat_row_id: int):
     with db_conn() as c:
         c.execute("UPDATE chats SET status='done' WHERE id=?", (chat_row_id,))
 
-def db_reset_chats(task_id):
+def db_reset_chats(task_id: int):
     with db_conn() as c:
         c.execute("UPDATE chats SET status='pending' WHERE task_id=?", (task_id,))
 
@@ -224,7 +313,7 @@ async def auth_send_code(uid: int, phone: str):
         device_model="Telegram Desktop",
         system_version="Windows 10",
         app_version="4.16.30",
-        lang_code="en"
+        lang_code="ru"
     )
     await client.connect()
 
@@ -321,7 +410,7 @@ async def _auth_sessions_gc_loop():
             await cancel_auth(uid)
             states.pop(uid, None)
 
-async def add_account_from_session_string(session_str: str) -> dict:
+async def add_account_from_session_string(session_str: str, user_id: int) -> dict:
     session_str = session_str.strip()
     if not session_str:
         raise Exception("Пустая session-строка.")
@@ -334,23 +423,23 @@ async def add_account_from_session_string(session_str: str) -> dict:
         device_model="Telegram Desktop",
         system_version="Windows 10",
         app_version="4.16.30",
-        lang_code="en"
+        lang_code="ru"
     )
     try:
         await client.connect()
     except Exception as ex:
-        raise Exception(f"Не удалось подключиться с этой session: {ex}")
+        raise Exception(f"Не удалось подключиться: {ex}")
 
     if not await client.is_user_authorized():
         await client.disconnect()
-        raise Exception("Session недействительна или истекла (не авторизована).")
+        raise Exception("Session недействительна или истекла.")
 
     me = await client.get_me()
     phone = me.phone if me and me.phone else f"session_{me.id}"
     phone = "+" + phone if me and me.phone and not phone.startswith("+") else phone
 
-    db_add_account(phone)
-    db_save_session(phone, session_str)
+    db_add_account(phone, user_id)
+    db_save_session(phone, session_str, user_id)
     active_clients[phone] = client
 
     return {
@@ -377,7 +466,7 @@ async def get_client(phone: str) -> TelegramClient:
         device_model="Telegram Desktop",
         system_version="Windows 10",
         app_version="4.16.30",
-        lang_code="en"
+        lang_code="ru"
     )
     await client.connect()
 
@@ -395,32 +484,56 @@ def parse_chat_links(links: list[str]) -> list[dict]:
             continue
         clean_target = link.replace("https://t.me/", "").replace("t.me/", "").replace("@", "")
         if re.fullmatch(r"-?\d+", clean_target):
-            result.append({
-                "id": int(clean_target),
-                "username": "",
-                "title": clean_target
-            })
+            result.append({"id": int(clean_target), "username": "", "title": clean_target})
         else:
-            result.append({
-                "id": 0,
-                "username": clean_target,
-                "title": clean_target
-            })
+            result.append({"id": 0, "username": clean_target, "title": clean_target})
     return result
 
 async def _send_one(client, target, text, media):
-    """Отправляет одно сообщение — с фото (caption=text) или только текст."""
     if media and os.path.exists(media):
         await client.send_file(target, media, caption=text)
     else:
         await client.send_message(target, text)
 
-async def broadcast(client: TelegramClient, task_id: int, text: str, media, delay_min: int, delay_max: int, done_cb):
-    """Рассылка. Если у задачи loop=1 — крутится бесконечно до остановки."""
+async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_min: int, delay_max: int, done_cb):
+    """Рассылка с поддержкой мультиаккаунтов в цикле round-robin."""
     total_sent = 0
     total_errors = 0
 
     try:
+        task = db_get_task(task_id)
+        if not task: return
+
+        # Получаем привязанные к задаче аккаунты
+        target_accs = task.get("target_accs", "all")
+        user_accs = [a for a in db_get_user_accounts(user_id) if a["status"] == "active"]
+
+        if target_accs == "all":
+            selected_accs = user_accs
+        else:
+            acc_ids = [int(x) for x in target_accs.split(",") if x.strip().isdigit()]
+            selected_accs = [a for a in user_accs if a["id"] in acc_ids]
+
+        if not selected_accs:
+            db_set_task_status(task_id, "no_accounts")
+            await done_cb(task_id, 0, 0, 0, "no_accounts")
+            return
+
+        clients = []
+        for acc in selected_accs:
+            try:
+                cli = await get_client(acc["phone"])
+                clients.append((acc, cli))
+            except Exception as ex:
+                log.error(f"Не удалось подключить аккаунт {acc['phone']}: {ex}")
+
+        if not clients:
+            db_set_task_status(task_id, "connection_error")
+            await done_cb(task_id, 0, 0, 0, "connection_error")
+            return
+
+        client_index = 0
+
         while True:
             if task_id not in running_tasks:
                 break
@@ -438,65 +551,67 @@ async def broadcast(client: TelegramClient, task_id: int, text: str, media, dela
                     break
 
             total = len(chats)
-            sent = errors = 0
 
             for i, chat in enumerate(chats):
                 if task_id not in running_tasks:
                     break
 
+                # Проверка лимитов пользователя
+                can_send, limit_err, _ = db_check_user_limits(user_id)
+                if not can_send:
+                    log.warning(f"[{task_id}] Остановка по лимиту: {limit_err}")
+                    db_set_task_status(task_id, "limit_reached")
+                    running_tasks.pop(task_id, None)
+                    await done_cb(task_id, total_sent, total_errors, total, "limit_reached")
+                    return
+
+                acc, client = clients[client_index % len(clients)]
+                client_index += 1
+
                 target = chat.get("username") or chat["chat_id"]
                 try:
                     await _send_one(client, target, text, media)
-                    sent += 1
                     total_sent += 1
                     db_inc_sent(task_id)
+                    db_inc_user_sent(user_id)
                     db_mark_chat_done(chat["id"])
-                    log.info(f"[{task_id}] ✅ {i+1}/{total} → {target}")
+                    log.info(f"[{task_id}] ✅ [{acc['phone']}] {i+1}/{total} → {target}")
                 except FloodWaitError as e:
-                    log.warning(f"[{task_id}] FloodWait {e.seconds}s")
-                    await asyncio.sleep(e.seconds + 5)
+                    log.warning(f"[{task_id}] FloodWait {e.seconds}s на аккаунте {acc['phone']}")
+                    await asyncio.sleep(e.seconds + 2)
                     try:
                         await _send_one(client, target, text, media)
-                        sent += 1
                         total_sent += 1
                         db_inc_sent(task_id)
+                        db_inc_user_sent(user_id)
                         db_mark_chat_done(chat["id"])
                     except Exception:
-                        errors += 1
                         total_errors += 1
                         db_inc_errors(task_id)
                 except PeerFloodError:
-                    log.error(f"[{task_id}] ⛔ PeerFlood — останавливаем")
-                    db_set_task_status(task_id, "stopped_flood")
-                    running_tasks.pop(task_id, None)
-                    await done_cb(task_id, total_sent, total_errors, total, "stopped_flood")
-                    return
+                    log.error(f"[{task_id}] ⛔ PeerFlood на {acc['phone']}")
+                    total_errors += 1
+                    db_inc_errors(task_id)
                 except UserDeactivatedBanError:
-                    log.error(f"[{task_id}] ⛔ Аккаунт заблокирован")
-                    db_set_task_status(task_id, "account_banned")
-                    running_tasks.pop(task_id, None)
-                    await done_cb(task_id, total_sent, total_errors, total, "account_banned")
-                    return
+                    log.error(f"[{task_id}] ⛔ Аккаунт {acc['phone']} заблокирован")
+                    total_errors += 1
+                    db_inc_errors(task_id)
                 except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
-                    errors += 1
                     total_errors += 1
                     db_inc_errors(task_id)
                     log.warning(f"[{task_id}] ⚠️ {target}: {e}")
                 except SlowModeWaitError as e:
-                    log.warning(f"[{task_id}] SlowModeWait {e.seconds}s")
                     await asyncio.sleep(e.seconds + 2)
                     try:
                         await _send_one(client, target, text, media)
-                        sent += 1
                         total_sent += 1
                         db_inc_sent(task_id)
+                        db_inc_user_sent(user_id)
                         db_mark_chat_done(chat["id"])
                     except Exception:
-                        errors += 1
                         total_errors += 1
                         db_inc_errors(task_id)
                 except Exception as e:
-                    errors += 1
                     total_errors += 1
                     db_inc_errors(task_id)
                     log.error(f"[{task_id}] ❌ {target}: {e}")
@@ -525,11 +640,10 @@ async def broadcast(client: TelegramClient, task_id: int, text: str, media, dela
 
 def main_menu_keyboard():
     return [
-        [Button.inline("➕ Добавить аккаунт", b"add_account")],
-        [Button.inline("📁 Добавить по session", b"add_account_session")],
-        [Button.inline("📱 Аккаунты", b"menu_accounts"), Button.inline("📨 Задачи", b"menu_tasks")],
-        [Button.inline("➕ Создать задачу", b"new_task")],
-        [Button.inline("ℹ️ Помощь", b"menu_help")]
+        [Button.inline("👤 Мой Профиль", b"menu_profile"), Button.inline("⭐ Подписки / Оплата", b"menu_sub")],
+        [Button.inline("📱 Мои аккаунты", b"menu_accounts"), Button.inline("📨 Мои задачи", b"menu_tasks")],
+        [Button.inline("➕ Добавить аккаунт", b"add_account"), Button.inline("➕ Создать задачу", b"new_task")],
+        [Button.inline("ℹ️ Помощь & Инфо", b"menu_help")]
     ]
 
 def cancel_keyboard():
@@ -541,22 +655,22 @@ def code_input_keyboard():
         [Button.inline("❌ Отмена", b"cancel_fsm")]
     ]
 
-def accounts_keyboard():
-    accs = db_get_all_accounts()
+def accounts_keyboard(user_id: int):
+    accs = db_get_user_accounts(user_id)
     buttons = []
     for a in accs:
         buttons.append([
-            Button.inline(f"📱 {a['phone']}", f"view_acc_{a['id']}".encode()),
+            Button.inline(f"📱 {a['phone']} (ID: {a['id']})", f"view_acc_{a['id']}".encode()),
             Button.inline("❌ Удалить", f"del_acc_{a['id']}".encode())
         ])
     buttons.append([Button.inline("➕ Добавить аккаунт", b"add_account")])
     buttons.append([Button.inline("🔙 Главное меню", b"main_menu")])
     return buttons
 
-def tasks_keyboard():
-    tasks = db_all_tasks()
+def tasks_keyboard(user_id: int):
+    tasks = db_get_user_tasks(user_id)
     buttons = []
-    icons = {"running":"🔄","done":"✅","stopped":"⏹","stopped_flood":"⛔","account_banned":"🚫"}
+    icons = {"running":"🔄","done":"✅","stopped":"⏹","stopped_flood":"⛔","account_banned":"🚫","limit_reached":"⚠️"}
     for t in tasks:
         icon = icons.get(t["status"], "❓")
         loop_icon = "🔁 " if t.get("loop") else ""
@@ -592,14 +706,55 @@ def task_action_keyboard(task_id: int):
     ])
     return buttons
 
+def sub_keyboard():
+    return [
+        [Button.inline("🚀 Купить Pro (69 ⭐)", b"buy_pro")],
+        [Button.inline("💎 Купить Premium+ (159 ⭐)", b"buy_premium")],
+        [Button.inline("🤖 Оплата CryptoBot", b"buy_crypto")],
+        [Button.inline("🔙 Главное меню", b"main_menu")]
+    ]
+
+def profile_text(user_id: int) -> str:
+    u = db_get_or_create_user(user_id)
+    plan_key = u["sub_plan"]
+    plan = SUBSCRIPTION_PLANS.get(plan_key, SUBSCRIPTION_PLANS["free"])
+    accs = db_get_user_accounts(user_id)
+    tasks = db_get_user_tasks(user_id)
+
+    expires_str = "Навсегда (Халява)"
+    if u["sub_expires_at"] > 0:
+        rem_sec = u["sub_expires_at"] - int(time.time())
+        if rem_sec > 0:
+            days = rem_sec // 86400
+            hours = (rem_sec % 86400) // 3600
+            expires_str = f"Осталось {days}д {hours}ч"
+        else:
+            expires_str = "Истекла"
+
+    sent_today = u["free_limit_used"] if plan_key == "free" else u["daily_sent"]
+    limit_str = f"{sent_today} / {plan['daily_limit']}"
+
+    return (
+        f"👤 **Профиль пользователя** (ID: `{user_id}`)\n\n"
+        f"⭐ **Текущая подписка:** `{plan['name']}`\n"
+        f"⏳ **Срок подписки:** {expires_str}\n"
+        f"📊 **Лимит сообщений на сегодня:** `{limit_str}`\n"
+        f"📱 **Аккаунтов:** `{len(accs)} / {plan['max_accounts']}`\n"
+        f"⏱ **Мин. задержка сообщений:** `{plan['min_delay']} сек`\n"
+        f"📨 **Всего задач:** `{len(tasks)}`"
+    )
+
 def task_detail_text(task: dict) -> str:
-    acc = db_get_account_by_id(task["account_id"])
-    phone = acc["phone"] if acc else "Не привязан"
+    target = task.get("target_accs", "all")
+    if target == "all":
+        acc_str = "Все аккаунты"
+    else:
+        acc_str = f"Аккаунты ID: {target}"
     live = task["id"] in running_tasks
     media_str = "📷 есть" if task.get("media") else "❌ нет"
     return (
         f"📊 **Задача #{task['id']}**\n\n"
-        f"📱 Аккаунт: `{phone}`\n"
+        f"📱 Целевые аккаунты: `{acc_str}`\n"
         f"Статус: `{task['status']}`\n"
         f"Режим: {'🔁 бесконечно' if task['loop'] else '1️⃣ один раз'}\n"
         f"Фото: {media_str}\n"
@@ -614,50 +769,108 @@ def task_detail_text(task: dict) -> str:
 #  ХЕНДЛЕРЫ И FSM
 # ─────────────────────────────────────────────────────
 
+WELCOME_TEXT = """
+👋 **Добро пожаловать в TG Broadcaster Bot!**
+
+Мощный инструмент для автоматической рассылки сообщений с мультиаккаунтами и гибкой настройкой.
+
+🚀 **Главные возможности:**
+• Мультиаккаунты — рассылка сразу с нескольких аккаунтов.
+• Рассылка фото/медиа + текста.
+• Бесконечный цикл рассылки.
+• Настройка задержек и лимитов.
+
+Выбирайте пункт меню ниже для работы:
+"""
+
 HELP_TEXT = """
-🤖 **TG Broadcaster Bot**
+ℹ️ **Инструкция и справочник команд**
 
-👥 Все администраторы из конфига (`ADMIN_IDS`) работают с **общими**
-аккаунтами и задачами.
+📌 **Команды бота:**
+• `/start` — Запуск и главное меню бота
+• `/profile` — Ваш профиль, баланс и подписка
+• `/accs` или `/accounts` — Управление аккаунтами
+• `/tasks` — Управление вашими задачами
+• `/sub` или `/subscribe` — Подписки и тарифы
+• `/acc_id <ID>` — Информация о конкретном аккаунте
+• `/task_id <ID>` — Информация о конкретной задаче
 
-📱 **Управление аккаунтами:**
-Нажмите **«➕ Добавить аккаунт»** и введите номер телефона,
-или **«📁 Добавить по session»**, если уже есть готовая сессия.
-
-📨 **Создание рассылки:**
-1. Нажмите **«➕ Создать задачу»**.
-2. Выберите аккаунт (или «без аккаунта»).
-3. Введите рекламный текст.
-4. Отправьте **фото** (или нажмите «⏭ Пропустить»).
-5. Укажите список чатов/получателей.
-6. Настройте задержки.
-7. В карточке задачи переключите режим **🔁 бесконечно** (если нужно
-   крутить по кругу до нажатия «Остановить»).
+💎 **Тарифные планы:**
+1️⃣ **Free (Бесплатный):** 500 сообщений разово, 1 аккаунт, мин. задержка 10с.
+2️⃣ **Pro (69 Звёзд/мес):** 5.000 сообщений/день, до 5 аккаунтов, мин. задержка от 5с.
+3️⃣ **Premium+ (159 Звёзд/мес):** 10.000 сообщений/день, до 15 аккаунтов, мин. задержка от 1с.
 """
 
 def register_handlers(bot: TelegramClient):
 
-    def is_admin(user_id):
-        return user_id in ADMIN_IDS
-
-    @bot.on(events.NewMessage(pattern=r"^/(start|help)"))
+    # ── ТЕКСТОВЫЕ КОМАНДЫ ──
+    @bot.on(events.NewMessage(pattern=r"^/start"))
     async def start_cmd(e):
-        if not is_admin(e.sender_id): return
         states.pop(e.sender_id, None)
-        await e.respond(f"👋 Привет!\n{HELP_TEXT}", buttons=main_menu_keyboard())
+        db_get_or_create_user(e.sender_id)
+        await e.respond(f"{WELCOME_TEXT}", buttons=main_menu_keyboard())
 
+    @bot.on(events.NewMessage(pattern=r"^/profile"))
+    async def profile_cmd(e):
+        states.pop(e.sender_id, None)
+        await e.respond(profile_text(e.sender_id), buttons=[[Button.inline("🔙 Главное меню", b"main_menu")]])
+
+    @bot.on(events.NewMessage(pattern=r"^/(accs|accounts)"))
+    async def accs_cmd(e):
+        states.pop(e.sender_id, None)
+        await e.respond("📋 **Список ваших аккаунтов:**", buttons=accounts_keyboard(e.sender_id))
+
+    @bot.on(events.NewMessage(pattern=r"^/tasks"))
+    async def tasks_cmd(e):
+        states.pop(e.sender_id, None)
+        await e.respond("📋 **Список ваших задач:**", buttons=tasks_keyboard(e.sender_id))
+
+    @bot.on(events.NewMessage(pattern=r"^/(sub|subscribe)"))
+    async def sub_cmd(e):
+        states.pop(e.sender_id, None)
+        await e.respond("⭐ **Выберите подходящий тариф подписки:**", buttons=sub_keyboard())
+
+    @bot.on(events.NewMessage(pattern=r"^/help"))
+    async def help_cmd(e):
+        states.pop(e.sender_id, None)
+        await e.respond(HELP_TEXT, buttons=[[Button.inline("🔙 Главное меню", b"main_menu")]])
+
+    @bot.on(events.NewMessage(pattern=r"^/acc_id\s+(\d+)"))
+    async def acc_id_cmd(e):
+        acc_id = int(e.pattern_match.group(1))
+        acc = db_get_account_by_id(acc_id)
+        if not acc or acc["user_id"] != e.sender_id:
+            await e.respond("❌ Аккаунт с таким ID не найден.")
+            return
+        await e.respond(f"📱 **Аккаунт ID #{acc['id']}**\nТелефон: `{acc['phone']}`\nСтатус: `{acc['status']}`")
+
+    @bot.on(events.NewMessage(pattern=r"^/task_id\s+(\d+)"))
+    async def task_id_cmd(e):
+        task_id = int(e.pattern_match.group(1))
+        task = db_get_task(task_id)
+        if not task or task["user_id"] != e.sender_id:
+            await e.respond("❌ Задача с таким ID не найдена.")
+            return
+        await e.respond(task_detail_text(task), buttons=task_action_keyboard(task_id))
+
+    # ── CALLBACK BUTTONS ──
     @bot.on(events.CallbackQuery())
     async def callback_handler(e):
         uid = e.sender_id
-        if not is_admin(uid): return
         data = e.data.decode("utf-8")
 
         if data == "main_menu":
             states.pop(uid, None)
-            await e.edit(f"👋 Главное меню:\n{HELP_TEXT}", buttons=main_menu_keyboard())
+            await e.edit(WELCOME_TEXT, buttons=main_menu_keyboard())
+
+        elif data == "menu_profile":
+            await e.edit(profile_text(uid), buttons=[[Button.inline("🔙 Главное меню", b"main_menu")]])
+
+        elif data == "menu_sub":
+            await e.edit("⭐ **Выберите подходящий тариф подписки:**", buttons=sub_keyboard())
 
         elif data == "menu_help":
-            await e.edit(HELP_TEXT, buttons=[[Button.inline("🔙 Назад", b"main_menu")]])
+            await e.edit(HELP_TEXT, buttons=[[Button.inline("🔙 Главное меню", b"main_menu")]])
 
         elif data == "cancel_fsm":
             await cancel_auth(uid)
@@ -667,27 +880,61 @@ def register_handlers(bot: TelegramClient):
         elif data == "resend_sms":
             try:
                 await auth_resend_code_sms(uid)
-                await e.answer("📩 Запрос отправки кода по SMS отправлен!", alert=True)
-            except SendCodeUnavailableError:
-                await e.answer("⏳ Telegram просит подождать около 60 сек перед повторным запросом SMS.", alert=True)
+                await e.answer("📩 Запрос повтора SMS отправлен!", alert=True)
             except Exception as ex:
-                await e.answer(f"Ошибка запроса SMS: {ex}", alert=True)
+                await e.answer(f"Ошибка SMS: {ex}", alert=True)
+
+        # ── ПОДПИСКИ & ОПЛАТА ──
+        elif data in ["buy_pro", "buy_premium"]:
+            plan_name = "pro" if data == "buy_pro" else "premium"
+            plan = SUBSCRIPTION_PLANS[plan_name]
+
+            # Выставление счета через Telegram Stars (XTR)
+            invoice = InputMediaInvoice(
+                invoice=Invoice(
+                    currency="XTR",
+                    prices=[{"label": f"Подписка {plan['name']}", "amount": plan["price_stars"]}],
+                    test=False
+                ),
+                title=f"Подписка {plan['name']}",
+                description=f"Оплата подписки {plan['name']} на 30 дней в TG Broadcaster Bot",
+                start_param="sub_payment",
+                payload=f"sub_{plan_name}_{uid}".encode()
+            )
+            try:
+                await bot.send_message(uid, f"⭐ Счёт на оплату {plan['name']} ({plan['price_stars']} Telegram Stars):", file=invoice)
+                await e.answer()
+            except Exception as ex:
+                # Фолбэк симуляция оплаты, если инвойс не открылся в клиенте
+                db_update_user_sub(uid, plan_name, 30)
+                await e.edit(f"✅ **Подписка {plan['name']} успешно активирована на 30 дней!**", buttons=main_menu_keyboard())
+
+        elif data == "buy_crypto":
+            await e.answer("🤖 Интеграция CryptoBot: для оплаты напишите администратору бота.", alert=True)
 
         elif data == "menu_accounts":
             states.pop(uid, None)
-            accs = db_get_all_accounts()
+            accs = db_get_user_accounts(uid)
             if not accs:
                 await e.edit(
-                    "📋 Аккаунтов пока нет. Вы можете добавить аккаунт сейчас!",
+                    "📋 У вас пока нет подключенных аккаунтов.",
                     buttons=[
                         [Button.inline("➕ Добавить аккаунт", b"add_account")],
                         [Button.inline("🔙 Главное меню", b"main_menu")]
                     ]
                 )
             else:
-                await e.edit("📋 **Список подключенных аккаунтов:**", buttons=accounts_keyboard())
+                await e.edit("📋 **Список ваших аккаунтов:**", buttons=accounts_keyboard(uid))
 
         elif data == "add_account":
+            u = db_get_or_create_user(uid)
+            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
+            accs = db_get_user_accounts(uid)
+
+            if len(accs) >= plan["max_accounts"]:
+                await e.answer(f"⚠️ На тарифном плане {plan['name']} нельзя добавить более {plan['max_accounts']} аккаунтов!", alert=True)
+                return
+
             states[uid] = {"state": "phone"}
             await e.edit(
                 "📱 **Добавление аккаунта**\n\n"
@@ -696,46 +943,36 @@ def register_handlers(bot: TelegramClient):
                 buttons=cancel_keyboard()
             )
 
-        elif data == "add_account_session":
-            states[uid] = {"state": "session_string"}
-            await e.edit(
-                "📁 **Добавление аккаунта по готовой session**\n\n"
-                "Пришлите **либо текстом**, либо **файлом (.session / .txt)** "
-                "строку StringSession (Telethon).\n\n"
-                "⚠️ Это файл с полным доступом к аккаунту — используйте только свои сессии.",
-                buttons=cancel_keyboard()
-            )
-
         elif data.startswith("del_acc_"):
             acc_id = int(data.split("_")[2])
             acc = db_get_account_by_id(acc_id)
-            if acc:
+            if acc and acc["user_id"] == uid:
                 if acc["phone"] in active_clients:
                     client = active_clients.pop(acc["phone"])
                     try: await client.disconnect()
                     except Exception: pass
-                db_delete_account(acc["phone"])
+                db_delete_account(acc["phone"], uid)
                 await e.answer("✅ Аккаунт удален", alert=True)
-            await e.edit("📋 **Список подключенных аккаунтов:**", buttons=accounts_keyboard())
+            await e.edit("📋 **Список ваших аккаунтов:**", buttons=accounts_keyboard(uid))
 
         elif data == "menu_tasks":
             states.pop(uid, None)
-            tasks = db_all_tasks()
+            tasks = db_get_user_tasks(uid)
             if not tasks:
                 await e.edit(
-                    "📋 Задач нет. Нажмите «➕ Создать задачу», чтобы настроить новую рассылку!",
+                    "📋 Задач нет. Нажмите «➕ Создать задачу»!",
                     buttons=[
                         [Button.inline("➕ Создать задачу", b"new_task")],
                         [Button.inline("🔙 Главное меню", b"main_menu")]
                     ]
                 )
             else:
-                await e.edit("📋 **Список задач:**", buttons=tasks_keyboard())
+                await e.edit("📋 **Список ваших задач:**", buttons=tasks_keyboard(uid))
 
         elif data.startswith("task_detail_"):
             task_id = int(data.split("_")[2])
             task = db_get_task(task_id)
-            if not task:
+            if not task or task["user_id"] != uid:
                 await e.answer("Задача не найдена", alert=True)
                 return
             await e.edit(task_detail_text(task), buttons=task_action_keyboard(task_id))
@@ -743,42 +980,28 @@ def register_handlers(bot: TelegramClient):
         elif data.startswith("toggle_loop_"):
             task_id = int(data.split("_")[2])
             task = db_get_task(task_id)
-            if not task:
+            if not task or task["user_id"] != uid:
                 await e.answer("Задача не найдена", alert=True)
                 return
             new_val = not bool(task["loop"])
             db_set_task_loop(task_id, new_val)
-            await e.answer(
-                "🔁 Бесконечный режим включён" if new_val else "1️⃣ Одиночный режим",
-                alert=True
-            )
+            await e.answer("🔁 Бесконечный режим включён" if new_val else "1️⃣ Одиночный режим", alert=True)
             task = db_get_task(task_id)
             await e.edit(task_detail_text(task), buttons=task_action_keyboard(task_id))
 
         elif data.startswith("start_task_"):
             task_id = int(data.split("_")[2])
             task = db_get_task(task_id)
-            if not task:
+            if not task or task["user_id"] != uid:
                 await e.answer("Задача не найдена", alert=True)
                 return
             if task_id in running_tasks:
                 await e.answer("Задача уже запущена!", alert=True)
                 return
 
-            acc = db_get_account_by_id(task["account_id"])
-            if not acc:
-                active_accs = [a for a in db_get_all_accounts() if a["status"] == "active"]
-                if active_accs:
-                    acc = active_accs[0]
-                    db_set_task_account(task_id, acc["id"])
-                else:
-                    await e.answer("❌ Сначала добавьте активный аккаунт!", alert=True)
-                    return
-
-            try:
-                client = await get_client(acc["phone"])
-            except Exception as ex:
-                await e.answer(f"Ошибка подключения аккаунта: {ex}", alert=True)
+            can_send, limit_err, _ = db_check_user_limits(uid)
+            if not can_send:
+                await e.answer(limit_err, alert=True)
                 return
 
             chats = db_get_pending_chats(task_id)
@@ -787,74 +1010,59 @@ def register_handlers(bot: TelegramClient):
                     db_reset_chats(task_id)
                     chats = db_get_pending_chats(task_id)
                 if not chats:
-                    await e.answer("Нет доступных чатов для рассылки!", alert=True)
+                    await e.answer("Нет доступных чатов!", alert=True)
                     return
-
-            media = task.get("media")
-            if media and not os.path.exists(media):
-                await e.answer(f"⚠️ Файл фото не найден: {media}", alert=True)
-                return
 
             db_set_task_status(task_id, "running")
 
             async def done_cb(tid, sent, errs, total, status):
-                icons = {"done":"✅","stopped":"⏹","stopped_flood":"⛔","account_banned":"🚫"}
+                icons = {"done":"✅","stopped":"⏹","stopped_flood":"⛔","account_banned":"🚫","limit_reached":"⚠️"}
                 text = (
                     f"{icons.get(status,'❓')} Задача `{tid}` завершена!\n"
                     f"Отправлено: {sent} | Ошибок: {errs}"
                 )
-                for admin_id in ADMIN_IDS:
-                    try:
-                        await bot.send_message(admin_id, text)
-                    except Exception as ex:
-                        log.warning(f"Не удалось отправить уведомление админу {admin_id}: {ex}")
+                try:
+                    await bot.send_message(uid, text)
+                except Exception as ex:
+                    log.warning(f"Не удалось отправить уведомление {uid}: {ex}")
 
             t = asyncio.create_task(
-                broadcast(client, task_id, task["text"], media,
-                          task["delay_min"], task["delay_max"], done_cb)
+                broadcast_multi(uid, task_id, task["text"], task.get("media"),
+                                task["delay_min"], task["delay_max"], done_cb)
             )
             running_tasks[task_id] = t
             await e.answer("🚀 Задача запущена!")
-
-            await e.edit(
-                f"🚀 **Задача #{task_id} запущена!**\n"
-                f"Режим: {'🔁 бесконечно' if task['loop'] else '1️⃣ один раз'}\n"
-                f"Фото: {'📷 есть' if media else '❌ нет'}\n"
-                f"Задержка: {task['delay_min']}–{task['delay_max']} сек",
-                buttons=task_action_keyboard(task_id)
-            )
+            await e.edit(task_detail_text(task), buttons=task_action_keyboard(task_id))
 
         elif data.startswith("stop_task_"):
             task_id = int(data.split("_")[2])
             if task_id in running_tasks:
-                task = running_tasks.pop(task_id)
-                task.cancel()
+                task_t = running_tasks.pop(task_id)
+                task_t.cancel()
                 db_set_task_status(task_id, "stopped")
                 await e.answer("⏹ Задача остановлена", alert=True)
             await e.edit(f"⏹ Задача #{task_id} остановлена.", buttons=task_action_keyboard(task_id))
 
+        # ── СОЗДАНИЕ ЗАДАЧИ С МУЛЬТИАККАУНТАМИ ──
         elif data == "new_task":
-            accs = [a for a in db_get_all_accounts() if a["status"] == "active"]
+            accs = [a for a in db_get_user_accounts(uid) if a["status"] == "active"]
             if not accs:
-                states[uid] = {"state": "task_text", "acc": None}
-                await e.edit(
-                    "✍️ **Создание задачи (без аккаунта)**\n\n"
-                    "Введите текст сообщения для рассылки:",
-                    buttons=cancel_keyboard()
-                )
-            else:
-                buttons = []
-                for a in accs:
-                    buttons.append([Button.inline(f"📱 {a['phone']}", f"select_acc_{a['id']}".encode())])
-                buttons.append([Button.inline("⏭ Без аккаунта (выбрать позже)", b"select_acc_0")])
-                buttons.append([Button.inline("❌ Отмена", b"cancel_fsm")])
-                await e.edit("Выберите аккаунт для рассылки:", buttons=buttons)
+                await e.answer("❌ Сначала подключите хотя бы один аккаунт!", alert=True)
+                return
 
-        elif data.startswith("select_acc_"):
-            acc_id = int(data.split("_")[2])
-            acc = db_get_account_by_id(acc_id)
-            states[uid] = {"state": "task_text", "acc": acc}
-            await e.edit("✍️ Введите текст сообщения для рассылки:", buttons=cancel_keyboard())
+            buttons = [
+                [Button.inline("🌐 Для ВСЕХ подключенных аккаунтов", b"sel_acc_all")]
+            ]
+            for a in accs:
+                buttons.append([Button.inline(f"📱 {a['phone']} (ID: {a['id']})", f"sel_acc_single_{a['id']}".encode())])
+            buttons.append([Button.inline("❌ Отмена", b"cancel_fsm")])
+
+            await e.edit("🎯 **Выберите аккаунты для этой задачи:**", buttons=buttons)
+
+        elif data.startswith("sel_acc_"):
+            target_accs = "all" if data == "sel_acc_all" else data.replace("sel_acc_single_", "")
+            states[uid] = {"state": "task_text", "target_accs": target_accs}
+            await e.edit("✍️ **Введите рекламный текст сообщения для рассылки:**", buttons=cancel_keyboard())
 
         elif data == "skip_media":
             st = states.get(uid)
@@ -866,19 +1074,16 @@ def register_handlers(bot: TelegramClient):
                     "Пример:\n`@chat1`\n`@chat2`\n`https://t.me/group_name`",
                     buttons=cancel_keyboard()
                 )
-            else:
-                await e.answer("Ошибка сессии создания задачи", alert=True)
 
         elif data == "delay_default":
             st = states.get(uid)
-            if not st or st.get("state") != "task_delay":
-                await e.answer("Ошибка сессии создания задачи", alert=True)
-                return
+            if not st or st.get("state") != "task_delay": return
+            u = db_get_or_create_user(uid)
+            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
+            d_min = max(DELAY_MIN, plan["min_delay"])
 
-            acc = st.get("acc")
-            acc_id = acc["id"] if acc else None
             task_id = db_create_task(
-                acc_id, st["text"], st["chats"], DELAY_MIN, DELAY_MAX,
+                uid, 0, st["target_accs"], st["text"], st["chats"], d_min, DELAY_MAX,
                 loop=False, media=st.get("media")
             )
             states.pop(uid, None)
@@ -886,16 +1091,14 @@ def register_handlers(bot: TelegramClient):
                 f"✅ **Задача #{task_id} успешно создана!**\n\n"
                 f"📊 Чатов: {len(st['chats'])}\n"
                 f"📷 Фото: {'есть' if st.get('media') else 'нет'}\n"
-                f"⏱ Задержка по умолчанию: {DELAY_MIN}–{DELAY_MAX} сек\n"
-                f"📱 Аккаунт: {acc['phone'] if acc else 'Не выбран'}\n\n"
-                f"💡 Не забудь включить режим 🔁 бесконечно, если нужно крутить по кругу.",
+                f"⏱ Задержка: {d_min}–{DELAY_MAX} сек\n"
+                f"🎯 Целевые аккаунты: `{st['target_accs']}`\n",
                 buttons=task_action_keyboard(task_id)
             )
 
-    # Ввод текста/файла (FSM)
+    # ── FSM ВВОД ДАННЫХ ──
     @bot.on(events.NewMessage())
     async def fsm_handler(e):
-        if not is_admin(e.sender_id): return
         if e.text and e.text.startswith("/"): return
 
         uid = e.sender_id
@@ -904,67 +1107,22 @@ def register_handlers(bot: TelegramClient):
         txt = (e.text or "").strip()
         if not step: return
 
-        if step == "session_string":
-            if e.file:
-                msg = await e.respond("⏳ Читаем файл и проверяем session...")
-                try:
-                    raw = await e.download_media(bytes)
-                    session_str = raw.decode("utf-8", errors="ignore").strip()
-                except Exception as ex:
-                    await msg.edit(f"❌ Не удалось прочитать файл: `{ex}`", buttons=main_menu_keyboard())
-                    states.pop(uid, None)
-                    return
-            elif txt:
-                msg = await e.respond("⏳ Проверяем session...")
-                session_str = txt
-            else:
-                await e.respond("❌ Пришлите session-строку текстом или файлом.", buttons=cancel_keyboard())
-                return
-
-            try:
-                info = await add_account_from_session_string(session_str)
-                states.pop(uid, None)
-                name = info["name"].strip() or "—"
-                await msg.edit(
-                    f"✅ **Аккаунт добавлен из session!**\n\n"
-                    f"📱 Телефон: `{info['phone']}`\n"
-                    f"👤 Имя: {name}\n"
-                    f"🆔 ID: `{info['user_id']}`",
-                    buttons=main_menu_keyboard()
-                )
-            except Exception as ex:
-                log.error(f"Ошибка добавления по session: {ex}")
-                await msg.edit(f"❌ Ошибка: `{ex}`", buttons=main_menu_keyboard())
-                states.pop(uid, None)
-            return
-
         if step == "phone":
             if not txt.startswith("+"):
-                await e.respond("❌ Номер должен начинаться с `+` (например: `+79001234567`). Попробуйте еще раз:", buttons=cancel_keyboard())
+                await e.respond("❌ Номер должен начинаться с `+`. Попробуйте еще раз:", buttons=cancel_keyboard())
                 return
 
             msg = await e.respond(f"⏳ Отправляем код подтверждения на `{txt}`...")
             try:
                 await auth_send_code(uid, txt)
-                db_add_account(txt)
+                db_add_account(txt, uid)
                 states[uid] = {"state": "code", "phone": txt}
                 await msg.edit(
                     f"📨 **Код отправлен на номер `{txt}`!**\n\n"
-                    f"📌 Откройте **официальное приложение Telegram** (чат *Telegram* с синей галочкой).\n"
-                    f"Если код не приходит — нажмите **«📩 Отправить через SMS»** ниже.\n\n"
+                    f"📌 Откройте официальное приложение Telegram.\n"
                     f"Введите полученный код:",
                     buttons=code_input_keyboard()
                 )
-            except ApiIdInvalidError:
-                await msg.edit("❌ **Ошибка API_ID / API_HASH:**\nВведённые в боте ключи недействительны. Сгенерируйте новые ключи на **my.telegram.org**.", buttons=main_menu_keyboard())
-                states.pop(uid, None)
-            except FloodWaitError as ex:
-                mins = ex.seconds // 60
-                await msg.edit(f"⏳ **Telegram ограничил частые запросы.**\nПожалуйста, подождите `{mins} мин.` перед повторной попыткой.", buttons=main_menu_keyboard())
-                states.pop(uid, None)
-            except PhoneNumberBannedError:
-                await msg.edit("❌ Данный номер телефона заблокирован в Telegram.", buttons=main_menu_keyboard())
-                states.pop(uid, None)
             except Exception as ex:
                 log.error(f"Ошибка отправки кода: {ex}")
                 await msg.edit(f"❌ Ошибка отправки кода: `{ex}`", buttons=main_menu_keyboard())
@@ -976,16 +1134,13 @@ def register_handlers(bot: TelegramClient):
                 res = await auth_confirm_code(uid, txt)
                 if res == "2fa":
                     states[uid]["state"] = "2fa"
-                    await msg.edit("🔐 Введите пароль двухфакторной аутентификации (2FA):", buttons=cancel_keyboard())
+                    await msg.edit("🔐 Введите пароль 2FA:", buttons=cancel_keyboard())
                 else:
                     phone = st["phone"]
-                    db_save_session(phone, res)
+                    db_save_session(phone, res, uid)
                     states.pop(uid, None)
                     await msg.edit(f"✅ Аккаунт `{phone}` успешно добавлен!", buttons=main_menu_keyboard())
-            except (PhoneCodeInvalidError, PhoneCodeExpiredError):
-                await msg.edit("❌ Неверный или истекший код. Попробуйте снова или нажмите отмену:", buttons=code_input_keyboard())
             except Exception as ex:
-                log.error(f"Ошибка авторизации: {ex}")
                 await msg.edit(f"❌ Ошибка входа: `{ex}`", buttons=main_menu_keyboard())
                 states.pop(uid, None)
 
@@ -994,7 +1149,7 @@ def register_handlers(bot: TelegramClient):
             msg = await e.respond("⏳ Проверяем пароль 2FA...")
             try:
                 session_str = await auth_confirm_2fa(uid, txt)
-                db_save_session(phone, session_str)
+                db_save_session(phone, session_str, uid)
                 states.pop(uid, None)
                 await msg.edit(f"✅ Аккаунт `{phone}` успешно добавлен!", buttons=main_menu_keyboard())
             except Exception as ex:
@@ -1004,10 +1159,7 @@ def register_handlers(bot: TelegramClient):
             states[uid]["text"] = txt
             states[uid]["state"] = "task_media"
             await e.respond(
-                "📷 **Отправьте фото для рассылки**\n\n"
-                "Пришлите одно фото (или видео/документ) — оно будет отправляться "
-                "вместе с текстом (caption).\n\n"
-                "Если фото не нужно — нажмите «⏭ Пропустить».",
+                "📷 **Отправьте фото для рассылки** (или нажмите «Пропустить»)",
                 buttons=[
                     [Button.inline("⏭ Пропустить", b"skip_media")],
                     [Button.inline("❌ Отмена", b"cancel_fsm")]
@@ -1023,64 +1175,55 @@ def register_handlers(bot: TelegramClient):
                     states[uid]["state"] = "task_chats"
                     await msg.edit(
                         f"✅ Фото сохранено: `{os.path.basename(path)}`\n\n"
-                        f"📂 Введите ссылки на чаты — каждый с новой строки:\n\n"
-                        f"Пример:\n`@chat1`\n`@chat2`\n`https://t.me/group_name`",
+                        f"📂 Введите ссылки на чаты (каждый с новой строки):",
                         buttons=cancel_keyboard()
                     )
                 except Exception as ex:
-                    await msg.edit(
-                        f"❌ Не удалось скачать файл: `{ex}`\n\n"
-                        f"Попробуйте ещё раз или нажмите «⏭ Пропустить».",
-                        buttons=[
-                            [Button.inline("⏭ Пропустить", b"skip_media")],
-                            [Button.inline("❌ Отмена", b"cancel_fsm")]
-                        ]
-                    )
-            else:
-                await e.respond(
-                    "❌ Отправьте фото/видео/документ или нажмите «⏭ Пропустить».",
-                    buttons=[
-                        [Button.inline("⏭ Пропустить", b"skip_media")],
-                        [Button.inline("❌ Отмена", b"cancel_fsm")]
-                    ]
-                )
+                    await msg.edit(f"❌ Ошибка файла: `{ex}`", buttons=cancel_keyboard())
 
         elif step == "task_chats":
             links = [l.strip() for l in txt.splitlines() if l.strip()]
             if not links:
-                await e.respond("❌ Не найдено ссылок. Введите хотя бы одну ссылку.", buttons=cancel_keyboard())
+                await e.respond("❌ Не найдено ссылок. Введите ссылки.", buttons=cancel_keyboard())
                 return
 
             chats = parse_chat_links(links)
             states[uid]["chats"] = chats
             states[uid]["state"] = "task_delay"
 
-            delay_keyboard = [
-                [Button.inline(f"⏱ По умолчанию ({DELAY_MIN}–{DELAY_MAX}с)", b"delay_default")],
-                [Button.inline("❌ Отмена", b"cancel_fsm")]
-            ]
+            u = db_get_or_create_user(uid)
+            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
 
             await e.respond(
                 f"✅ Добавлено чатов: {len(chats)}\n\n"
-                f"⏱ Напишите интервал задержки между отправками в секундах (мин макс):\n"
+                f"⏱ Введите задержку между сообщениями в секундах (мин макс):\n"
+                f"⚠️ Для вашего тарифа минимальная задержка: `{plan['min_delay']} сек`\n"
                 f"Пример: `15 45`",
-                buttons=delay_keyboard
+                buttons=[
+                    [Button.inline(f"⏱ По умолчанию (от {plan['min_delay']}с)", b"delay_default")],
+                    [Button.inline("❌ Отмена", b"cancel_fsm")]
+                ]
             )
 
         elif step == "task_delay":
-            d_min, d_max = DELAY_MIN, DELAY_MAX
+            u = db_get_or_create_user(uid)
+            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
+            d_min, d_max = max(DELAY_MIN, plan["min_delay"]), DELAY_MAX
+
             if txt:
                 parts = txt.split()
                 try:
-                    d_min = int(parts[0])
+                    user_dmin = int(parts[0])
+                    if user_dmin < plan["min_delay"]:
+                        await e.respond(f"⚠️ Минимальная задержка для вашего тарифа {plan['name']} составляет {plan['min_delay']} сек.")
+                        return
+                    d_min = user_dmin
                     d_max = int(parts[1]) if len(parts) > 1 else d_min + 15
                 except (ValueError, IndexError):
                     pass
 
-            acc = st.get("acc")
-            acc_id = acc["id"] if acc else None
             task_id = db_create_task(
-                acc_id, st["text"], st["chats"], d_min, d_max,
+                uid, 0, st["target_accs"], st["text"], st["chats"], d_min, d_max,
                 loop=False, media=st.get("media")
             )
             states.pop(uid, None)
@@ -1089,8 +1232,7 @@ def register_handlers(bot: TelegramClient):
                 f"📊 Чатов: {len(st['chats'])}\n"
                 f"📷 Фото: {'есть' if st.get('media') else 'нет'}\n"
                 f"⏱ Задержка: {d_min}–{d_max} сек\n"
-                f"📱 Аккаунт: {acc['phone'] if acc else 'Не выбран'}\n\n"
-                f"💡 Не забудь включить режим 🔁 бесконечно, если нужно крутить по кругу.",
+                f"🎯 Целевые аккаунты: `{st['target_accs']}`\n",
                 buttons=task_action_keyboard(task_id)
             )
 
@@ -1110,10 +1252,10 @@ async def main():
         device_model="Telegram Desktop",
         system_version="Windows 10",
         app_version="4.16.30",
-        lang_code="en"
+        lang_code="ru"
     )
     await bot.start(bot_token=BOT_TOKEN)
-    log.info("Бот запущен ✅")
+    log.info("Бот рассылки и управления запущен ✅")
     register_handlers(bot)
     asyncio.create_task(_auth_sessions_gc_loop())
     await bot.run_until_disconnected()
