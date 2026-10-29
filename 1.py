@@ -15,7 +15,8 @@ import os
 import time
 import aiohttp
 
-from telethon import TelegramClient, events, connection, types, functions
+from telethon import TelegramClient, events, connection
+from telethon.tl import types, functions
 from telethon.sessions import StringSession
 from telethon.tl.custom import Button
 from telethon.tl.types import InputMediaInvoice, Invoice
