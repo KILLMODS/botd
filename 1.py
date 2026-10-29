@@ -330,7 +330,7 @@ async def check_cryptobot_invoice(invoice_id: int) -> bool:
     return False
 
 # ─────────────────────────────────────────────────────
-#  USER-КЛИЕНТЫ И АВТОРИЗАЦИЯ (ИЗ СКТРИПТА 1_2.PY)
+#  USER-КЛИЕНТЫ И АВТОРИЗАЦИЯ
 # ─────────────────────────────────────────────────────
 
 active_clients: dict[str, TelegramClient] = {}
@@ -829,7 +829,7 @@ WELCOME_TEXT = """
 👋 **ДОБРО ПОЖАЛОВАТЬ В TG BROADCASTER!**
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🤖 ** TG Broadcaster** — мощный автоматизированный инструмент для ведения безопасных рассылок в Telegram.
+🤖 **TG Broadcaster** — мощный автоматизированный инструмент для ведения безопасных рассылок в Telegram.
 
 ✨ **ОСНОВНЫЕ ВОЗМОЖНОСТИ:**
 • 📱 **Мультиаккаунты** — рассылка сразу с нескольких аккаунтов.
@@ -1084,7 +1084,8 @@ def register_handlers(bot: TelegramClient):
                 title=f"Подписка {plan['name']}",
                 description=f"Оплата подписки {plan['name']} на 30 дней",
                 start_param="sub_payment",
-                payload=f"sub_{plan_name}_{uid}".encode()
+                payload=f"sub_{plan_name}_{uid}".encode(),
+                provider_data=types.DataJSON(data="{}")
             )
             try:
                 await bot.send_message(uid, f"⭐ **Счёт на оплату {plan['name']} ({plan['price_stars']} Telegram Stars):**", file=invoice)
