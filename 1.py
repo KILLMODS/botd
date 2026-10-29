@@ -15,7 +15,7 @@ import os
 import time
 import aiohttp
 
-from telethon import TelegramClient, events, connection
+from telethon import TelegramClient, events, connection, types, functions
 from telethon.sessions import StringSession
 from telethon.tl.custom import Button
 from telethon.tl.types import InputMediaInvoice, Invoice
@@ -888,32 +888,8 @@ def register_handlers(bot: TelegramClient):
                 except Exception as ex:
                     log.error(f"Error notifying payment: {ex}")
 
-        elif data == "add_account_session":
-            u = db_get_or_create_user(uid)
-            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
-            accs = db_get_user_accounts(uid)
-
-            if len(accs) >= plan["max_accounts"]:
-                await e.answer(f"⚠️ На вашем тарифе можно добавить не более {plan['max_accounts']} аккаунтов!", alert=True)
-                return
-
-            states[uid] = {"state": "session_string"}
-            await e.edit(
-                "📁 **Добавление аккаунта по готовой session**\n\n"
-                "Пришлите **либо текстом**, либо **файлом (.session / .txt)** "
-                "строку StringSession (Telethon).",
-                buttons=cancel_keyboard()
-            )
-
-        elif data == "resend_sms":
-            try:
-                await auth_resend_code_sms(uid)
-                await e.answer("📩 Запрос отправки кода по SMS отправлен!", alert=True)
-            except SendCodeUnavailableError:
-                await e.answer("⏳ Telegram просит подождать около 60 сек перед повторным запросом SMS.", alert=True)
-            except Exception as ex:
-                await e.answer(f"Ошибка запроса SMS: {ex}", alert=True)
-
+    @bot.on(events.NewMessage(pattern=r"^/profile"))
+    async def profile_cmd(e):
         states.pop(e.sender_id, None)
         await e.respond(profile_text(e.sender_id), buttons=[[Button.inline("🔙 Главное меню", b"main_menu")]])
 
@@ -982,6 +958,32 @@ def register_handlers(bot: TelegramClient):
             await cancel_auth(uid)
             states.pop(uid, None)
             await e.edit("❌ **Действие отменено.**", buttons=main_menu_keyboard(uid))
+
+        elif data == "add_account_session":
+            u = db_get_or_create_user(uid)
+            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
+            accs = db_get_user_accounts(uid)
+
+            if len(accs) >= plan["max_accounts"]:
+                await e.answer(f"⚠️ На вашем тарифе можно добавить не более {plan['max_accounts']} аккаунтов!", alert=True)
+                return
+
+            states[uid] = {"state": "session_string"}
+            await e.edit(
+                "📁 **Добавление аккаунта по готовой session**\n\n"
+                "Пришлите **либо текстом**, либо **файлом (.session / .txt)** "
+                "строку StringSession (Telethon).",
+                buttons=cancel_keyboard()
+            )
+
+        elif data == "resend_sms":
+            try:
+                await auth_resend_code_sms(uid)
+                await e.answer("📩 Запрос отправки кода по SMS отправлен!", alert=True)
+            except SendCodeUnavailableError:
+                await e.answer("⏳ Telegram просит подождать около 60 сек перед повторным запросом SMS.", alert=True)
+            except Exception as ex:
+                await e.answer(f"Ошибка запроса SMS: {ex}", alert=True)
 
         elif data.startswith("view_acc_"):
             acc_id = int(data.split("_")[2])
@@ -1085,49 +1087,6 @@ def register_handlers(bot: TelegramClient):
             except Exception as ex:
                 log.error(f"Stars invoice error: {ex}")
                 await e.answer(f"Ошибка выявления счета Telegram Stars: {ex}", alert=True)
-
-                pay_url = inv["pay_url"]
-                buttons = [
-                    [Button.url("💳 Перейти к оплате (CryptoBot)", pay_url)],
-                    [Button.inline("✅ Я оплатил", f"check_crypto_{plan_name}".encode())],
-                    [Button.inline("🔙 Назад", b"buy_crypto")]
-                ]
-                await e.edit(
-                    f"🤖 **Счёт на оплату тарифa {plan['name']}**\n"
-                    f"━━━━━━━━━━━━━━━━━━━\n"
-                    f"💰 Сумма: **{plan['price_usd']} USDT**\n\n"
-                    f"Нажмите кнопку ниже для перехода к оплате:",
-                    buttons=buttons
-                )
-            else:
-                await e.edit("⚠️ Ошибка генерации счета. Проверьте правильность токена CryptoBot.", buttons=[[Button.inline("🔙 Назад", b"buy_crypto")]])
-
-        elif data.startswith("check_crypto_"):
-            plan_name = data.replace("check_crypto_", "")
-            db_update_user_sub(uid, plan_name, 30)
-            await e.edit(f"🎉 **Подписка {plan_name.upper()} успешно активирована на 30 дней!**", buttons=main_menu_keyboard(uid))
-
-        # ── STARS ──
-        elif data in ["buy_pro_stars", "buy_premium_stars"]:
-            plan_name = "pro" if data == "buy_pro_stars" else "premium"
-            plan = SUBSCRIPTION_PLANS[plan_name]
-
-            invoice = InputMediaInvoice(
-                invoice=Invoice(
-                    currency="XTR",
-                    prices=[{"label": f"Подписка {plan['name']}", "amount": plan["price_stars"]}],
-                    test=False
-                ),
-                title=f"Подписка {plan['name']}",
-                description=f"Оплата подписки {plan['name']} на 30 дней",
-                start_param="sub_payment",
-                payload=f"sub_{plan_name}_{uid}".encode()
-            )
-            try:
-                await bot.send_message(uid, f"⭐ **Счёт на оплату {plan['name']} ({plan['price_stars']} Telegram Stars):**", file=invoice)
-            except Exception:
-                db_update_user_sub(uid, plan_name, 30)
-                await e.edit(f"🎉 **Подписка {plan['name']} успешно активирована на 30 дней!**", buttons=main_menu_keyboard(uid))
 
         elif data == "menu_accounts":
             states.pop(uid, None)
