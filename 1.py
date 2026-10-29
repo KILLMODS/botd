@@ -312,8 +312,24 @@ async def create_cryptobot_invoice(amount_usd: float, description: str) -> dict:
         log.error(f"CryptoBot Connection Error: {ex}")
         return None
 
+async def check_cryptobot_invoice(invoice_id: int) -> bool:
+    """Проверка статуса оплаты инвойса в CryptoBot API"""
+    url = f"https://pay.crypt.bot/api/getInvoices?invoice_ids={invoice_id}"
+    headers = {"Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                data = await resp.json()
+                if data.get("ok") and data.get("result") and data["result"].get("items"):
+                    items = data["result"]["items"]
+                    if items and items[0].get("status") == "paid":
+                        return True
+    except Exception as ex:
+        log.error(f"CryptoBot check error: {ex}")
+    return False
+
 # ─────────────────────────────────────────────────────
-#  USER-КЛИЕНТЫ И АВТОРИЗАЦИЯ
+#  USER-КЛИЕНТЫ И АВТОРИЗАЦИЯ (ИЗ СКТРИПТА 1_2.PY)
 # ─────────────────────────────────────────────────────
 
 active_clients: dict[str, TelegramClient] = {}
@@ -340,7 +356,7 @@ async def auth_send_code(uid: int, phone: str):
         device_model="Telegram Desktop",
         system_version="Windows 10",
         app_version="4.16.30",
-        lang_code="ru"
+        lang_code="en"
     )
     await client.connect()
 
@@ -437,6 +453,44 @@ async def _auth_sessions_gc_loop():
             await cancel_auth(uid)
             states.pop(uid, None)
 
+async def add_account_from_session_string(session_str: str, user_id: int = 0) -> dict:
+    session_str = session_str.strip()
+    if not session_str:
+        raise Exception("Пустая session-строка.")
+
+    client = TelegramClient(
+        StringSession(session_str),
+        API_ID,
+        API_HASH,
+        connection=connection.ConnectionTcpAbridged,
+        device_model="Telegram Desktop",
+        system_version="Windows 10",
+        app_version="4.16.30",
+        lang_code="en"
+    )
+    try:
+        await client.connect()
+    except Exception as ex:
+        raise Exception(f"Не удалось подключиться с этой session: {ex}")
+
+    if not await client.is_user_authorized():
+        await client.disconnect()
+        raise Exception("Session недействительна или истекла (не авторизована).")
+
+    me = await client.get_me()
+    phone = me.phone if me and me.phone else f"session_{me.id}"
+    phone = "+" + phone if me and me.phone and not phone.startswith("+") else phone
+
+    db_add_account(phone, user_id)
+    db_save_session(phone, session_str, user_id)
+    active_clients[phone] = client
+
+    return {
+        "phone": phone,
+        "user_id": me.id if me else None,
+        "name": (me.first_name or "") + (f" {me.last_name}" if me and me.last_name else "") if me else ""
+    }
+
 async def get_client(phone: str) -> TelegramClient:
     if phone in active_clients:
         client = active_clients[phone]
@@ -455,7 +509,7 @@ async def get_client(phone: str) -> TelegramClient:
         device_model="Telegram Desktop",
         system_version="Windows 10",
         app_version="4.16.30",
-        lang_code="ru"
+        lang_code="en"
     )
     await client.connect()
 
@@ -629,8 +683,8 @@ def main_menu_keyboard(user_id: int):
     kb = [
         [Button.inline("👤 Мой Профиль", b"menu_profile"), Button.inline("⭐ Подписки / Оплата", b"menu_sub")],
         [Button.inline("📱 Мои аккаунты", b"menu_accounts"), Button.inline("📨 Мои задачи", b"menu_tasks")],
-        [Button.inline("➕ Добавить аккаунт", b"add_account"), Button.inline("➕ Создать задачу", b"new_task")],
-        [Button.inline("ℹ️ Помощь & Инфо", b"menu_help")]
+        [Button.inline("➕ Добавить аккаунт", b"add_account"), Button.inline("📁 По session", b"add_account_session")],
+        [Button.inline("➕ Создать задачу", b"new_task"), Button.inline("ℹ️ Помощь & Инфо", b"menu_help")]
     ]
     if user_id in ADMIN_IDS:
         kb.append([Button.inline("👑 Админ-панель", b"admin_menu")])
@@ -653,7 +707,10 @@ def accounts_keyboard(user_id: int):
             Button.inline(f"📱 {a['phone']} (ID: {a['id']})", f"view_acc_{a['id']}".encode()),
             Button.inline("❌ Удалить", f"del_acc_{a['id']}".encode())
         ])
-    buttons.append([Button.inline("➕ Добавить аккаунт", b"add_account")])
+    buttons.append([
+        Button.inline("➕ Добавить аккаунт", b"add_account"),
+        Button.inline("📁 По session", b"add_account_session")
+    ])
     buttons.append([Button.inline("🔙 Главное меню", b"main_menu")])
     return buttons
 
@@ -807,8 +864,56 @@ def register_handlers(bot: TelegramClient):
         db_get_or_create_user(e.sender_id)
         await e.respond(WELCOME_TEXT, buttons=main_menu_keyboard(e.sender_id))
 
-    @bot.on(events.NewMessage(pattern=r"^/profile"))
-    async def profile_cmd(e):
+    # Обработка оплаты Telegram Stars
+    @bot.on(events.Raw(types.UpdateNewPreCheckoutQuery))
+    async def pre_checkout_handler(event):
+        await bot(functions.messages.SetBotPrecheckoutResultsRequest(
+            user_id=event.user_id,
+            query_id=event.query_id,
+            success=True
+        ))
+
+    @bot.on(events.Raw(types.UpdateMessageService))
+    async def service_message_handler(event):
+        if hasattr(event.message, 'action') and isinstance(event.message.action, types.MessageActionPaymentSentMe):
+            payment = event.message.action
+            payload = payment.payload.decode('utf-8') if isinstance(payment.payload, bytes) else str(payment.payload)
+            parts = payload.split("_")
+            if len(parts) >= 3 and parts[0] == "sub":
+                plan_name = parts[1]
+                user_id = int(parts[2])
+                db_update_user_sub(user_id, plan_name, 30)
+                try:
+                    await bot.send_message(user_id, f"🎉 **Подписка {plan_name.upper()} успешно оплачена через Telegram Stars и активирована на 30 дней!**", buttons=main_menu_keyboard(user_id))
+                except Exception as ex:
+                    log.error(f"Error notifying payment: {ex}")
+
+        elif data == "add_account_session":
+            u = db_get_or_create_user(uid)
+            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
+            accs = db_get_user_accounts(uid)
+
+            if len(accs) >= plan["max_accounts"]:
+                await e.answer(f"⚠️ На вашем тарифе можно добавить не более {plan['max_accounts']} аккаунтов!", alert=True)
+                return
+
+            states[uid] = {"state": "session_string"}
+            await e.edit(
+                "📁 **Добавление аккаунта по готовой session**\n\n"
+                "Пришлите **либо текстом**, либо **файлом (.session / .txt)** "
+                "строку StringSession (Telethon).",
+                buttons=cancel_keyboard()
+            )
+
+        elif data == "resend_sms":
+            try:
+                await auth_resend_code_sms(uid)
+                await e.answer("📩 Запрос отправки кода по SMS отправлен!", alert=True)
+            except SendCodeUnavailableError:
+                await e.answer("⏳ Telegram просит подождать около 60 сек перед повторным запросом SMS.", alert=True)
+            except Exception as ex:
+                await e.answer(f"Ошибка запроса SMS: {ex}", alert=True)
+
         states.pop(e.sender_id, None)
         await e.respond(profile_text(e.sender_id), buttons=[[Button.inline("🔙 Главное меню", b"main_menu")]])
 
@@ -926,7 +1031,61 @@ def register_handlers(bot: TelegramClient):
             plan = SUBSCRIPTION_PLANS[plan_name]
             inv = await create_cryptobot_invoice(plan["price_usd"], f"Подписка {plan['name']}")
 
-            if inv and inv.get("pay_url"):
+            if inv and inv.get("pay_url") and inv.get("invoice_id"):
+                pay_url = inv["pay_url"]
+                inv_id = inv["invoice_id"]
+                buttons = [
+                    [Button.url("💳 Перейти к оплате (CryptoBot)", pay_url)],
+                    [Button.inline("✅ Я оплатил", f"check_crypto_{plan_name}_{inv_id}".encode())],
+                    [Button.inline("🔙 Назад", b"buy_crypto")]
+                ]
+                await e.edit(
+                    f"🤖 **Счёт #{inv_id} на оплату тарифа {plan['name']}**\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"💰 Сумма: **{plan['price_usd']} USDT**\n\n"
+                    f"Нажмите кнопку ниже для перехода к оплате:",
+                    buttons=buttons
+                )
+            else:
+                await e.edit("⚠️ Ошибка генерации счета. Проверьте правильность токена CryptoBot.", buttons=[[Button.inline("🔙 Назад", b"buy_crypto")]])
+
+        elif data.startswith("check_crypto_"):
+            parts = data.split("_")
+            if len(parts) >= 4:
+                plan_name = parts[2]
+                inv_id = int(parts[3])
+
+                is_paid = await check_cryptobot_invoice(inv_id)
+                if is_paid:
+                    db_update_user_sub(uid, plan_name, 30)
+                    await e.edit(f"🎉 **Подписка {plan_name.upper()} успешно оплачена и активирована на 30 дней!**", buttons=main_menu_keyboard(uid))
+                else:
+                    await e.answer("❌ Счет ещё не был оплачен в CryptoBot! Оплатите чек и попробуйте снова.", alert=True)
+            else:
+                await e.answer("❌ Неверные данные счета.", alert=True)
+
+        elif data in ["buy_pro_stars", "buy_premium_stars"]:
+            plan_name = "pro" if data == "buy_pro_stars" else "premium"
+            plan = SUBSCRIPTION_PLANS[plan_name]
+
+            invoice = InputMediaInvoice(
+                invoice=Invoice(
+                    currency="XTR",
+                    prices=[types.LabeledPrice(label=f"Подписка {plan['name']}", amount=plan["price_stars"])],
+                    test=False
+                ),
+                title=f"Подписка {plan['name']}",
+                description=f"Оплата подписки {plan['name']} на 30 дней",
+                start_param="sub_payment",
+                payload=f"sub_{plan_name}_{uid}".encode()
+            )
+            try:
+                await bot.send_message(uid, f"⭐ **Счёт на оплату {plan['name']} ({plan['price_stars']} Telegram Stars):**", file=invoice)
+                await e.answer("📩 Счёт на оплату Stars отправлен сообщением!")
+            except Exception as ex:
+                log.error(f"Stars invoice error: {ex}")
+                await e.answer(f"Ошибка выявления счета Telegram Stars: {ex}", alert=True)
+
                 pay_url = inv["pay_url"]
                 buttons = [
                     [Button.url("💳 Перейти к оплате (CryptoBot)", pay_url)],
@@ -1161,6 +1320,40 @@ def register_handlers(bot: TelegramClient):
         txt = (e.text or "").strip()
         if not step: return
 
+        if step == "session_string":
+            if e.file:
+                msg = await e.respond("⏳ Читаем файл и проверяем session...")
+                try:
+                    raw = await e.download_media(bytes)
+                    session_str = raw.decode("utf-8", errors="ignore").strip()
+                except Exception as ex:
+                    await msg.edit(f"❌ Не удалось прочитать файл: `{ex}`", buttons=main_menu_keyboard(uid))
+                    states.pop(uid, None)
+                    return
+            elif txt:
+                msg = await e.respond("⏳ Проверяем session...")
+                session_str = txt
+            else:
+                await e.respond("❌ Пришлите session-строку текстом или файлом.", buttons=cancel_keyboard())
+                return
+
+            try:
+                info = await add_account_from_session_string(session_str, uid)
+                states.pop(uid, None)
+                name = info["name"].strip() or "—"
+                await msg.edit(
+                    f"✅ **Аккаунт добавлен из session!**\n\n"
+                    f"📱 Телефон: `{info['phone']}`\n"
+                    f"👤 Имя: {name}\n"
+                    f"🆔 ID: `{info['user_id']}`",
+                    buttons=main_menu_keyboard(uid)
+                )
+            except Exception as ex:
+                log.error(f"Ошибка добавления по session: {ex}")
+                await msg.edit(f"❌ Ошибка: `{ex}`", buttons=main_menu_keyboard(uid))
+                states.pop(uid, None)
+            return
+
         if step == "admin_input_sub":
             if uid not in ADMIN_IDS: return
             parts = txt.split()
@@ -1183,7 +1376,7 @@ def register_handlers(bot: TelegramClient):
 
         elif step == "phone":
             if not txt.startswith("+"):
-                await e.respond("❌ Номер должен начинаться с `+`. Попробуйте еще раз:", buttons=cancel_keyboard())
+                await e.respond("❌ Номер должен начинаться с `+` (например: `+79001234567`). Попробуйте еще раз:", buttons=cancel_keyboard())
                 return
 
             msg = await e.respond(f"⏳ Отправляем код подтверждения на `{txt}`...")
@@ -1193,9 +1386,21 @@ def register_handlers(bot: TelegramClient):
                 states[uid] = {"state": "code", "phone": txt}
                 await msg.edit(
                     f"📨 **Код отправлен на номер `{txt}`!**\n\n"
-                    f"📌 Откройте официальное приложение Telegram и введите код:",
+                    f"📌 Откройте **официальное приложение Telegram** (чат *Telegram* с синей галочкой).\n"
+                    f"Если код не приходит — нажмите **«📩 Отправить через SMS»** ниже.\n\n"
+                    f"Введите полученный код:",
                     buttons=code_input_keyboard()
                 )
+            except ApiIdInvalidError:
+                await msg.edit("❌ **Ошибка API_ID / API_HASH:**\nВведённые в боте ключи недействительны. Сгенерируйте новые ключи на **my.telegram.org**.", buttons=main_menu_keyboard(uid))
+                states.pop(uid, None)
+            except FloodWaitError as ex:
+                mins = ex.seconds // 60
+                await msg.edit(f"⏳ **Telegram ограничил частые запросы.**\nПожалуйста, подождите `{mins} мин.` перед повторной попыткой.", buttons=main_menu_keyboard(uid))
+                states.pop(uid, None)
+            except PhoneNumberBannedError:
+                await msg.edit("❌ Данный номер телефона заблокирован в Telegram.", buttons=main_menu_keyboard(uid))
+                states.pop(uid, None)
             except Exception as ex:
                 log.error(f"Ошибка отправки кода: {ex}")
                 await msg.edit(f"❌ Ошибка отправки кода: `{ex}`", buttons=main_menu_keyboard(uid))
@@ -1213,8 +1418,11 @@ def register_handlers(bot: TelegramClient):
                     db_save_session(phone, res, uid)
                     states.pop(uid, None)
                     await msg.edit(f"✅ Аккаунт `{phone}` успешно добавлен!", buttons=main_menu_keyboard(uid))
+            except (PhoneCodeInvalidError, PhoneCodeExpiredError):
+                await msg.edit("❌ Неверный или истекший код. Попробуйте снова или нажмите отмену:", buttons=code_input_keyboard())
             except Exception as ex:
-                await msg.edit(f"❌ Ошибка авторизации: `{ex}`", buttons=main_menu_keyboard(uid))
+                log.error(f"Ошибка авторизации: {ex}")
+                await msg.edit(f"❌ Ошибка входа: `{ex}`", buttons=main_menu_keyboard(uid))
                 states.pop(uid, None)
 
         elif step == "2fa":
