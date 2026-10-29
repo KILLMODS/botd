@@ -37,7 +37,7 @@ API_HASH         = os.environ.get("API_HASH", "dc58ef881ea53b1faafcf6ad974306a7"
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE")
 ADMIN_IDS        = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "7459502130, 8658384308").split(",") if x.strip()]
 
-# Ключ CryptoBot — вставьте сюда ваш токен от @CryptoBot / @CryptoTestnetBot
+# Ключ CryptoBot
 CRYPTO_BOT_TOKEN = os.environ.get("CRYPTO_BOT_TOKEN", "662370:AARfAYc3i7xelw6VdEomWOY043wF8cQ4wGb")
 
 AUTH_SESSION_TTL = 600
@@ -285,7 +285,7 @@ async def create_cryptobot_invoice(amount_usd: float, description: str) -> dict:
         "asset": "USDT",
         "amount": str(amount_usd),
         "description": description,
-        "paid_btn_name": "callback",
+        "paid_btn_name": "openBot",
         "paid_btn_url": "https://t.me/"
     }
     try:
@@ -706,48 +706,50 @@ def profile_text(user_id: int) -> str:
     accs = db_get_user_accounts(user_id)
     tasks = db_get_user_tasks(user_id)
 
-    expires_str = "Навсегда (Free)"
+    expires_str = "♾️ Навсегда (Free)"
     if u["sub_expires_at"] > 0:
         rem_sec = u["sub_expires_at"] - int(time.time())
         if rem_sec > 0:
             days = rem_sec // 86400
             hours = (rem_sec % 86400) // 3600
-            expires_str = f"Осталось {days}д {hours}ч"
+            expires_str = f"⏳ `{days}д {hours}ч`"
         else:
-            expires_str = "Истекла"
+            expires_str = "❌ Истекла"
 
     sent_today = u["free_limit_used"] if plan_key == "free" else u["daily_sent"]
     limit_str = f"{sent_today} / {plan['daily_limit']}"
 
     return (
-        f"👤 **Профиль пользователя** (ID: `{user_id}`)\n\n"
-        f"⭐ **Текущая подписка:** `{plan['name']}`\n"
-        f"⏳ **Срок подписки:** {expires_str}\n"
-        f"📊 **Лимит сообщений на сегодня:** `{limit_str}`\n"
-        f"📱 **Аккаунтов:** `{len(accs)} / {plan['max_accounts']}`\n"
-        f"⏱ **Мин. задержка сообщений:** `{plan['min_delay']} сек`\n"
+        f"👤 **ЛИЧНЫЙ КАБИНЕТ**\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 **Ваш ID:** `{user_id}`\n\n"
+        f"⭐ **Подписка:** `{plan['name']}`\n"
+        f"⏱ **Срок действия:** {expires_str}\n"
+        f"📊 **Отправлено сегодня:** `{limit_str}`\n\n"
+        f"📱 **Подключено аккаунтов:** `{len(accs)} / {plan['max_accounts']}`\n"
+        f"⚡ **Мин. задержка:** `{plan['min_delay']} сек`\n"
         f"📨 **Всего задач:** `{len(tasks)}`"
     )
 
 def task_detail_text(task: dict) -> str:
     target = task.get("target_accs", "all")
     if target == "all":
-        acc_str = "Все аккаунты"
+        acc_str = "🌐 Все аккаунты"
     else:
-        acc_str = f"Аккаунты ID: {target}"
+        acc_str = f"📱 ID: {target}"
     live = task["id"] in running_tasks
-    media_str = "📷 есть" if task.get("media") else "❌ нет"
+    media_str = "📷 Прикреплено" if task.get("media") else "❌ Отсутствует"
     return (
-        f"📊 **Задача #{task['id']}**\n\n"
-        f"📱 Целевые аккаунты: `{acc_str}`\n"
-        f"Статус: `{task['status']}`\n"
-        f"Режим: {'🔁 бесконечно' if task['loop'] else '1️⃣ один раз'}\n"
-        f"Фото: {media_str}\n"
-        f"Отправлено: `{task['sent']}`\n"
-        f"Ошибок: `{task['errors']}`\n"
-        f"Интервал: `{task['delay_min']}–{task['delay_max']} сек`\n"
-        f"Активна: {'🟢 Да' if live else '🔴 Нет'}\n\n"
-        f"💬 **Текст:**\n{task['text'][:150]}..."
+        f"📊 **ИНФОРМАЦИЯ О ЗАДАЧЕ #{task['id']}**\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"📱 **Целевые аккаунты:** `{acc_str}`\n"
+        f"📌 **Статус:** `{task['status']}`\n"
+        f"🔁 **Режим:** {'Бесконечный' if task['loop'] else 'Одиночный'}\n"
+        f"🖼 **Медиа:** {media_str}\n\n"
+        f"📈 **Отправлено:** `{task['sent']}` | ❌ **Ошибок:** `{task['errors']}`\n"
+        f"⏱ **Интервал:** `{task['delay_min']}–{task['delay_max']} сек`\n"
+        f"🟢 **Запущена:** {'Да' if live else 'Нет'}\n\n"
+        f"📝 **Текст рассылки:**\n_{task['text'][:150]}..._"
     )
 
 # ─────────────────────────────────────────────────────
@@ -755,33 +757,33 @@ def task_detail_text(task: dict) -> str:
 # ─────────────────────────────────────────────────────
 
 WELCOME_TEXT = """
-👋 **Добро пожаловать в TG Broadcaster Bot!**
+👋 **ДОБРО ПОЖАЛОВАТЬ В TG BROADCASTER!**
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Мощный инструмент для автоматической рассылки сообщений с мультиаккаунтами и гибкой настройкой.
+🤖 ** TG Broadcaster** — мощный автоматизированный инструмент для ведения безопасных рассылок в Telegram.
 
-🚀 **Главные возможности:**
-• Мультиаккаунты — рассылка сразу с нескольких аккаунтов.
-• Рассылка фото/медиа + текста.
-• Бесконечный цикл рассылки.
-• Оплата Stars и CryptoBot (USDT).
+✨ **ОСНОВНЫЕ ВОЗМОЖНОСТИ:**
+• 📱 **Мультиаккаунты** — рассылка сразу с нескольких аккаунтов.
+• 🖼 **Поддержка медиа** — отправка текста с фотографиями.
+• 🔁 **Бесконечный цикл** — авто-повтор рассылки по кругу.
+• ⚡ **Умные задержки** — защита от спам-блоков.
 
-Выбирайте пункт меню ниже для работы:
+👇 *Воспользуйтесь меню ниже для управления:*
 """
 
 HELP_TEXT = """
-ℹ️ **Инструкция и справочник команд**
+ℹ️ **СПРАВОЧНОЕ РУКОВОДСТВО**
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📌 **Команды бота:**
+📌 **ПОЛЬЗОВАТЕЛЬСКИЕ КОМАНДЫ:**
 • `/start` — Главное меню
-• `/profile` — Ваш профиль и подписка
-• `/accs` или `/accounts` — Управление аккаунтами
-• `/tasks` — Управление вашими задачами
-• `/sub` или `/subscribe` — Подписки и тарифы
-• `/admin` — Админ-панель (для администраторов)
-• `/give_sub <user_id> <pro/premium> <days>` — Выдать подписку (для админов)
+• `/profile` — Личный кабинет и статистика
+• `/accs` — Управление подключенными аккаунтами
+• `/tasks` — Просмотр и запуск задач
+• `/sub` — Приобретение тарифных планов
 
-💎 **Тарифные планы:**
-1️⃣ **Free (Бесплатный):** 500 сообщений разово, 1 аккаунт, мин. задержка 10с.
+💎 **ТАРИФНЫЕ ПЛАНЫ И ЛИМИТЫ:**
+1️⃣ **Free (Стартовый):** 500 сообщений (всего), 1 аккаунт, мин. задержка 10с.
 2️⃣ **Pro (69 Звёзд / $1.99):** 5.000 сообщений/день, до 5 аккаунтов, мин. задержка от 5с.
 3️⃣ **Premium+ (159 Звёзд / $4.49):** 10.000 сообщений/день, до 15 аккаунтов, мин. задержка от 1с.
 """
@@ -802,12 +804,12 @@ def register_handlers(bot: TelegramClient):
     @bot.on(events.NewMessage(pattern=r"^/(accs|accounts)"))
     async def accs_cmd(e):
         states.pop(e.sender_id, None)
-        await e.respond("📋 **Список ваших аккаунтов:**", buttons=accounts_keyboard(e.sender_id))
+        await e.respond("📱 **Управление аккаунтами:**", buttons=accounts_keyboard(e.sender_id))
 
     @bot.on(events.NewMessage(pattern=r"^/tasks"))
     async def tasks_cmd(e):
         states.pop(e.sender_id, None)
-        await e.respond("📋 **Список ваших задач:**", buttons=tasks_keyboard(e.sender_id))
+        await e.respond("📨 **Управление задачами:**", buttons=tasks_keyboard(e.sender_id))
 
     @bot.on(events.NewMessage(pattern=r"^/(sub|subscribe)"))
     async def sub_cmd(e):
@@ -824,7 +826,7 @@ def register_handlers(bot: TelegramClient):
     async def admin_cmd(e):
         if e.sender_id not in ADMIN_IDS: return
         states.pop(e.sender_id, None)
-        await e.respond("👑 **Админ-панель управления:**", buttons=admin_keyboard())
+        await e.respond("👑 **Панель Администратора:**", buttons=admin_keyboard())
 
     @bot.on(events.NewMessage(pattern=r"^/give_sub\s+(\d+)\s+(pro|premium|free)\s*(\d+)?"))
     async def give_sub_cmd(e):
@@ -834,9 +836,9 @@ def register_handlers(bot: TelegramClient):
         days = int(e.pattern_match.group(3) or 30)
 
         db_update_user_sub(target_uid, plan, days)
-        await e.respond(f"✅ Пользователю `{target_uid}` успешно выдана подписка **{plan.upper()}** на {days} дней!")
+        await e.respond(f"✅ Пользователю `{target_uid}` выдана подписка **{plan.upper()}** на {days} дней!")
         try:
-            await bot.send_message(target_uid, f"🎉 ВАМ ВЫДАНА ПОДПИСКА **{plan.upper()}** на {days} дней администратором!")
+            await bot.send_message(target_uid, f"🎉 **Вам активирована подписка {plan.upper()} на {days} дней!**")
         except Exception:
             pass
 
@@ -845,6 +847,7 @@ def register_handlers(bot: TelegramClient):
     async def callback_handler(e):
         uid = e.sender_id
         data = e.data.decode("utf-8")
+        await e.answer()
 
         if data == "main_menu":
             states.pop(uid, None)
@@ -854,7 +857,7 @@ def register_handlers(bot: TelegramClient):
             await e.edit(profile_text(uid), buttons=[[Button.inline("💳 Сменить тариф", b"menu_sub"), Button.inline("🔙 Главное меню", b"main_menu")]])
 
         elif data == "menu_sub":
-            await e.edit("⭐ **Выберите подходящий тариф подписки:**", buttons=sub_keyboard())
+            await e.edit("⭐ **Выберите тариф для оформления подписки:**", buttons=sub_keyboard())
 
         elif data == "menu_help":
             await e.edit(HELP_TEXT, buttons=[[Button.inline("🔙 Главное меню", b"main_menu")]])
@@ -862,39 +865,50 @@ def register_handlers(bot: TelegramClient):
         elif data == "cancel_fsm":
             await cancel_auth(uid)
             states.pop(uid, None)
-            await e.edit("❌ Действие отменено.", buttons=main_menu_keyboard(uid))
+            await e.edit("❌ **Действие отменено.**", buttons=main_menu_keyboard(uid))
+
+        elif data.startswith("view_acc_"):
+            acc_id = int(data.split("_")[2])
+            acc = db_get_account_by_id(acc_id)
+            if acc:
+                await e.edit(
+                    f"📱 **Аккаунт ID: `{acc['id']}`**\n"
+                    f"📞 Телефон: `{acc['phone']}`\n"
+                    f"📌 Статус: `{acc['status']}`",
+                    buttons=[[Button.inline("❌ Удалить", f"del_acc_{acc['id']}".encode())], [Button.inline("🔙 Назад", b"menu_accounts")]]
+                )
 
         # ── АДМИН-ПАНЕЛЬ ──
         elif data == "admin_menu":
             if uid not in ADMIN_IDS: return
-            await e.edit("👑 **Админ-панель управления:**", buttons=admin_keyboard())
+            await e.edit("👑 **Панель Администратора:**", buttons=admin_keyboard())
 
         elif data == "admin_users_list":
             if uid not in ADMIN_IDS: return
             users = db_get_all_users()
-            msg = f"👥 **Всего пользователей в БД:** {len(users)}\n\n"
-            for u in users[:20]:
-                msg += f"• ID: `{u['user_id']}` | План: `{u['sub_plan']}` | Отправлено: `{u['daily_sent']}`\n"
+            msg = f"👥 **Пользователи в БД:** `{len(users)}`\n━━━━━━━━━━━━━━━━━━━\n"
+            for u in users[:15]:
+                msg += f"• ID: `{u['user_id']}` | План: `{u['sub_plan']}`\n"
             await e.edit(msg, buttons=[[Button.inline("🔙 Назад", b"admin_menu")]])
 
         elif data == "admin_give_sub":
             if uid not in ADMIN_IDS: return
             states[uid] = {"state": "admin_input_sub"}
             await e.edit(
-                "✍️ **Выдача подписки пользователю**\n\n"
-                "Введите сообщение формата:\n`<user_id> <pro/premium> <дни>`\n\n"
-                "Пример:\n`7459502130 pro 30`",
+                "✍️ **Выдача подписки**\n\n"
+                "Введите данные в формате:\n`<user_id> <pro/premium> <дни>`\n\n"
+                "Пример: `7459502130 pro 30`",
                 buttons=cancel_keyboard()
             )
 
-        # ── ОПЛАТА CRYPTOBOT ──
+        # ── CRYPTOBOT ──
         elif data == "buy_crypto":
             buttons = [
                 [Button.inline("🚀 Pro ($1.99 USDT)", b"pay_crypto_pro")],
                 [Button.inline("💎 Premium+ ($4.49 USDT)", b"pay_crypto_premium")],
                 [Button.inline("🔙 Отмена", b"menu_sub")]
             ]
-            await e.edit("🤖 **Оплата через CryptoBot (USDT):**\nВыберите тариф подписки:", buttons=buttons)
+            await e.edit("🤖 **Оплата через CryptoBot (USDT):**\nВыберите нужный тариф:", buttons=buttons)
 
         elif data in ["pay_crypto_pro", "pay_crypto_premium"]:
             plan_name = "pro" if data == "pay_crypto_pro" else "premium"
@@ -904,26 +918,26 @@ def register_handlers(bot: TelegramClient):
             if inv and inv.get("pay_url"):
                 pay_url = inv["pay_url"]
                 buttons = [
-                    [Button.url("💳 Перейти к оплате в CryptoBot", pay_url)],
+                    [Button.url("💳 Перейти к оплате (CryptoBot)", pay_url)],
                     [Button.inline("✅ Я оплатил", f"check_crypto_{plan_name}".encode())],
                     [Button.inline("🔙 Назад", b"buy_crypto")]
                 ]
                 await e.edit(
-                    f"🤖 **Счёт на оплату подписки {plan['name']} создан!**\n\n"
-                    f"Смма: **{plan['price_usd']} USDT**\n\n"
+                    f"🤖 **Счёт на оплату тарифa {plan['name']}**\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"💰 Сумма: **{plan['price_usd']} USDT**\n\n"
                     f"Нажмите кнопку ниже для перехода к оплате:",
                     buttons=buttons
                 )
             else:
-                await e.answer("⚠️ Ошибка CryptoBot! Проверьте CRYPTO_BOT_TOKEN в файле настроек.", alert=True)
+                await e.edit("⚠️ Ошибка генерации счета. Проверьте правильность токена CryptoBot.", buttons=[[Button.inline("🔙 Назад", b"buy_crypto")]])
 
         elif data.startswith("check_crypto_"):
             plan_name = data.replace("check_crypto_", "")
-            # Имитация успешной активации или проверка статуса
             db_update_user_sub(uid, plan_name, 30)
-            await e.edit(f"✅ **Оплата прошла успешно! Подписка {plan_name.upper()} активирована на 30 дней.**", buttons=main_menu_keyboard(uid))
+            await e.edit(f"🎉 **Подписка {plan_name.upper()} успешно активирована на 30 дней!**", buttons=main_menu_keyboard(uid))
 
-        # ── ОПЛАТА STARS ──
+        # ── STARS ──
         elif data in ["buy_pro_stars", "buy_premium_stars"]:
             plan_name = "pro" if data == "buy_pro_stars" else "premium"
             plan = SUBSCRIPTION_PLANS[plan_name]
@@ -940,25 +954,24 @@ def register_handlers(bot: TelegramClient):
                 payload=f"sub_{plan_name}_{uid}".encode()
             )
             try:
-                await bot.send_message(uid, f"⭐ Счёт на оплату {plan['name']} ({plan['price_stars']} Telegram Stars):", file=invoice)
-                await e.answer()
+                await bot.send_message(uid, f"⭐ **Счёт на оплату {plan['name']} ({plan['price_stars']} Telegram Stars):**", file=invoice)
             except Exception:
                 db_update_user_sub(uid, plan_name, 30)
-                await e.edit(f"✅ **Подписка {plan['name']} успешно активирована на 30 дней!**", buttons=main_menu_keyboard(uid))
+                await e.edit(f"🎉 **Подписка {plan['name']} успешно активирована на 30 дней!**", buttons=main_menu_keyboard(uid))
 
         elif data == "menu_accounts":
             states.pop(uid, None)
             accs = db_get_user_accounts(uid)
             if not accs:
                 await e.edit(
-                    "📋 У вас пока нет подключенных аккаунтов.",
+                    "📱 **У вас пока нет подключенных аккаунтов.**",
                     buttons=[
                         [Button.inline("➕ Добавить аккаунт", b"add_account")],
                         [Button.inline("🔙 Главное меню", b"main_menu")]
                     ]
                 )
             else:
-                await e.edit("📋 **Список ваших аккаунтов:**", buttons=accounts_keyboard(uid))
+                await e.edit("📱 **Список ваших аккаунтов:**", buttons=accounts_keyboard(uid))
 
         elif data == "add_account":
             u = db_get_or_create_user(uid)
@@ -966,13 +979,13 @@ def register_handlers(bot: TelegramClient):
             accs = db_get_user_accounts(uid)
 
             if len(accs) >= plan["max_accounts"]:
-                await e.answer(f"⚠️ На тарифном плане {plan['name']} нельзя добавить более {plan['max_accounts']} аккаунтов!", alert=True)
+                await e.answer(f"⚠️ На тарифном плане {plan['name']} можно добавить не более {plan['max_accounts']} аккаунтов!", alert=True)
                 return
 
             states[uid] = {"state": "phone"}
             await e.edit(
-                "📱 **Добавление аккаунта**\n\n"
-                "Введите номер телефона аккаунта в международном формате:\n"
+                "📱 **Подключение аккаунта**\n\n"
+                "Введите номер телефона в международном формате:\n"
                 "Пример: `+79001234567`",
                 buttons=cancel_keyboard()
             )
@@ -987,21 +1000,21 @@ def register_handlers(bot: TelegramClient):
                     except Exception: pass
                 db_delete_account(acc["phone"], uid)
                 await e.answer("✅ Аккаунт удален", alert=True)
-            await e.edit("📋 **Список ваших аккаунтов:**", buttons=accounts_keyboard(uid))
+            await e.edit("📱 **Список ваших аккаунтов:**", buttons=accounts_keyboard(uid))
 
         elif data == "menu_tasks":
             states.pop(uid, None)
             tasks = db_get_user_tasks(uid)
             if not tasks:
                 await e.edit(
-                    "📋 Задач нет. Нажмите «➕ Создать задачу»!",
+                    "📨 **У вас пока нет созданных задач.**",
                     buttons=[
                         [Button.inline("➕ Создать задачу", b"new_task")],
                         [Button.inline("🔙 Главное меню", b"main_menu")]
                     ]
                 )
             else:
-                await e.edit("📋 **Список ваших задач:**", buttons=tasks_keyboard(uid))
+                await e.edit("📨 **Список ваших задач:**", buttons=tasks_keyboard(uid))
 
         elif data.startswith("task_detail_"):
             task_id = int(data.split("_")[2])
@@ -1019,7 +1032,6 @@ def register_handlers(bot: TelegramClient):
                 return
             new_val = not bool(task["loop"])
             db_set_task_loop(task_id, new_val)
-            await e.answer("🔁 Бесконечный режим включён" if new_val else "1️⃣ Одиночный режим", alert=True)
             task = db_get_task(task_id)
             await e.edit(task_detail_text(task), buttons=task_action_keyboard(task_id))
 
@@ -1052,8 +1064,8 @@ def register_handlers(bot: TelegramClient):
             async def done_cb(tid, sent, errs, total, status):
                 icons = {"done":"✅","stopped":"⏹","stopped_flood":"⛔","account_banned":"🚫","limit_reached":"⚠️"}
                 text = (
-                    f"{icons.get(status,'❓')} Задача `{tid}` завершена!\n"
-                    f"Отправлено: {sent} | Ошибок: {errs}"
+                    f"{icons.get(status,'❓')} **Задача #{tid} завершена!**\n\n"
+                    f"✅ Отправлено: `{sent}` | ❌ Ошибок: `{errs}`"
                 )
                 try:
                     await bot.send_message(uid, text)
@@ -1065,7 +1077,6 @@ def register_handlers(bot: TelegramClient):
                                 task["delay_min"], task["delay_max"], done_cb)
             )
             running_tasks[task_id] = t
-            await e.answer("🚀 Задача запущена!")
             await e.edit(task_detail_text(task), buttons=task_action_keyboard(task_id))
 
         elif data.startswith("stop_task_"):
@@ -1074,8 +1085,7 @@ def register_handlers(bot: TelegramClient):
                 task_t = running_tasks.pop(task_id)
                 task_t.cancel()
                 db_set_task_status(task_id, "stopped")
-                await e.answer("⏹ Задача остановлена", alert=True)
-            await e.edit(f"⏹ Задача #{task_id} остановлена.", buttons=task_action_keyboard(task_id))
+            await e.edit(f"⏹ **Задача #{task_id} остановлена.**", buttons=task_action_keyboard(task_id))
 
         elif data == "new_task":
             accs = [a for a in db_get_user_accounts(uid) if a["status"] == "active"]
@@ -1090,12 +1100,12 @@ def register_handlers(bot: TelegramClient):
                 buttons.append([Button.inline(f"📱 {a['phone']} (ID: {a['id']})", f"sel_acc_single_{a['id']}".encode())])
             buttons.append([Button.inline("❌ Отмена", b"cancel_fsm")])
 
-            await e.edit("🎯 **Выберите аккаунты для этой задачи:**", buttons=buttons)
+            await e.edit("🎯 **Выберите аккаунты для рассылки:**", buttons=buttons)
 
         elif data.startswith("sel_acc_"):
             target_accs = "all" if data == "sel_acc_all" else data.replace("sel_acc_single_", "")
             states[uid] = {"state": "task_text", "target_accs": target_accs}
-            await e.edit("✍️ **Введите рекламный текст сообщения для рассылки:**", buttons=cancel_keyboard())
+            await e.edit("✍️ **Введите текст рекламного сообщения:**", buttons=cancel_keyboard())
 
         elif data == "skip_media":
             st = states.get(uid)
@@ -1103,7 +1113,7 @@ def register_handlers(bot: TelegramClient):
                 st["media"] = None
                 st["state"] = "task_chats"
                 await e.edit(
-                    "📂 Введите ссылки на чаты — каждый с новой строки:\n\n"
+                    "📂 **Введите список чатов/получателей (каждый с новой строки):**\n\n"
                     "Пример:\n`@chat1`\n`@chat2`\n`https://t.me/group_name`",
                     buttons=cancel_keyboard()
                 )
@@ -1122,10 +1132,10 @@ def register_handlers(bot: TelegramClient):
             states.pop(uid, None)
             await e.edit(
                 f"✅ **Задача #{task_id} успешно создана!**\n\n"
-                f"📊 Чатов: {len(st['chats'])}\n"
-                f"📷 Фото: {'есть' if st.get('media') else 'нет'}\n"
-                f"⏱ Задержка: {d_min}–30 сек\n"
-                f"🎯 Целевые аккаунты: `{st['target_accs']}`\n",
+                f"📊 Чатов: `{len(st['chats'])}`\n"
+                f"📷 Медиа: `{'Есть' if st.get('media') else 'Нет'}`\n"
+                f"⏱ Задержка: `{d_min}–30 сек`\n"
+                f"🎯 Аккаунты: `{st['target_accs']}`",
                 buttons=task_action_keyboard(task_id)
             )
 
@@ -1154,7 +1164,7 @@ def register_handlers(bot: TelegramClient):
                 states.pop(uid, None)
                 await e.respond(f"✅ Выдана подписка `{plan}` пользователю `{target_uid}` на {days} дней!", buttons=admin_keyboard())
                 try:
-                    await bot.send_message(target_uid, f"🎉 Вам активирована подписка **{plan.upper()}** на {days} дней!")
+                    await bot.send_message(target_uid, f"🎉 **Вам активирована подписка {plan.upper()} на {days} дней!**")
                 except Exception:
                     pass
             except Exception as ex:
@@ -1172,8 +1182,7 @@ def register_handlers(bot: TelegramClient):
                 states[uid] = {"state": "code", "phone": txt}
                 await msg.edit(
                     f"📨 **Код отправлен на номер `{txt}`!**\n\n"
-                    f"📌 Откройте официальное приложение Telegram.\n"
-                    f"Введите полученный код:",
+                    f"📌 Откройте официальное приложение Telegram и введите код:",
                     buttons=code_input_keyboard()
                 )
             except Exception as ex:
@@ -1187,14 +1196,14 @@ def register_handlers(bot: TelegramClient):
                 res = await auth_confirm_code(uid, txt)
                 if res == "2fa":
                     states[uid]["state"] = "2fa"
-                    await msg.edit("🔐 Введите пароль 2FA:", buttons=cancel_keyboard())
+                    await msg.edit("🔐 Введите пароль двухфакторной аутентификации (2FA):", buttons=cancel_keyboard())
                 else:
                     phone = st["phone"]
                     db_save_session(phone, res, uid)
                     states.pop(uid, None)
                     await msg.edit(f"✅ Аккаунт `{phone}` успешно добавлен!", buttons=main_menu_keyboard(uid))
             except Exception as ex:
-                await msg.edit(f"❌ Ошибка входа: `{ex}`", buttons=main_menu_keyboard(uid))
+                await msg.edit(f"❌ Ошибка авторизации: `{ex}`", buttons=main_menu_keyboard(uid))
                 states.pop(uid, None)
 
         elif step == "2fa":
@@ -1212,7 +1221,7 @@ def register_handlers(bot: TelegramClient):
             states[uid]["text"] = txt
             states[uid]["state"] = "task_media"
             await e.respond(
-                "📷 **Отправьте фото для рассылки** (или нажмите «Пропустить»)",
+                "📷 **Прикрепите фото для рассылки** (или нажмите «Пропустить»)",
                 buttons=[
                     [Button.inline("⏭ Пропустить", b"skip_media")],
                     [Button.inline("❌ Отмена", b"cancel_fsm")]
@@ -1221,23 +1230,23 @@ def register_handlers(bot: TelegramClient):
 
         elif step == "task_media":
             if e.photo or e.document or e.video:
-                msg = await e.respond("⏳ Скачиваем файл...")
+                msg = await e.respond("⏳ Скачиваем медиафайл...")
                 try:
                     path = await e.download_media(file="data/media/")
                     states[uid]["media"] = path
                     states[uid]["state"] = "task_chats"
                     await msg.edit(
-                        f"✅ Фото сохранено: `{os.path.basename(path)}`\n\n"
-                        f"📂 Введите ссылки на чаты (каждый с новой строки):",
+                        f"✅ Медиа сохранено: `{os.path.basename(path)}`\n\n"
+                        f"📂 Введите список чатов/получателей (каждый с новой строки):",
                         buttons=cancel_keyboard()
                     )
                 except Exception as ex:
-                    await msg.edit(f"❌ Ошибка файла: `{ex}`", buttons=cancel_keyboard())
+                    await msg.edit(f"❌ Ошибка скачивания файла: `{ex}`", buttons=cancel_keyboard())
 
         elif step == "task_chats":
             links = [l.strip() for l in txt.splitlines() if l.strip()]
             if not links:
-                await e.respond("❌ Не найдено ссылок. Введите ссылки.", buttons=cancel_keyboard())
+                await e.respond("❌ Не найдено ссылок. Введите список получателей.", buttons=cancel_keyboard())
                 return
 
             chats = parse_chat_links(links)
@@ -1248,9 +1257,9 @@ def register_handlers(bot: TelegramClient):
             plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
 
             await e.respond(
-                f"✅ Добавлено чатов: {len(chats)}\n\n"
-                f"⏱ Введите задержку между сообщениями в секундах (мин макс):\n"
-                f"⚠️ Для вашего тарифа минимальная задержка: `{plan['min_delay']} сек`\n"
+                f"✅ Добавлено получателей: `{len(chats)}`\n\n"
+                f"⏱ Укажите диапазон задержки между отправками в секундах (мин макс):\n"
+                f"⚠️ Минимальная задержка для вашего тарифа: `{plan['min_delay']} сек`\n"
                 f"Пример: `15 45`",
                 buttons=[
                     [Button.inline(f"⏱ По умолчанию (от {plan['min_delay']}с)", b"delay_default")],
@@ -1268,7 +1277,7 @@ def register_handlers(bot: TelegramClient):
                 try:
                     user_dmin = int(parts[0])
                     if user_dmin < plan["min_delay"]:
-                        await e.respond(f"⚠️ Минимальная задержка для вашего тарифа {plan['name']} составляет {plan['min_delay']} сек.")
+                        await e.respond(f"⚠️ Минимальная задержка для вашего тарифа составляет {plan['min_delay']} сек.")
                         return
                     d_min = user_dmin
                     d_max = int(parts[1]) if len(parts) > 1 else d_min + 15
@@ -1282,10 +1291,10 @@ def register_handlers(bot: TelegramClient):
             states.pop(uid, None)
             await e.respond(
                 f"✅ **Задача #{task_id} успешно создана!**\n\n"
-                f"📊 Чатов: {len(st['chats'])}\n"
-                f"📷 Фото: {'есть' if st.get('media') else 'нет'}\n"
-                f"⏱ Задержка: {d_min}–{d_max} сек\n"
-                f"🎯 Целевые аккаунты: `{st['target_accs']}`\n",
+                f"📊 Получателей: `{len(st['chats'])}`\n"
+                f"📷 Медиа: `{'Есть' if st.get('media') else 'Нет'}`\n"
+                f"⏱ Задержка: `{d_min}–{d_max} сек`\n"
+                f"🎯 Аккаунты: `{st['target_accs']}`",
                 buttons=task_action_keyboard(task_id)
             )
 
