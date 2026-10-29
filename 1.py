@@ -134,6 +134,17 @@ def db_init():
             );
         """)
 
+        # ── МИГРАЦИИ ДЛЯ СУЩЕСТВУЮЩЕЙ БАЗЫ ──
+        acc_cols = [r[1] for r in c.execute("PRAGMA table_info(accounts)").fetchall()]
+        if "user_id" not in acc_cols:
+            c.execute("ALTER TABLE accounts ADD COLUMN user_id INTEGER DEFAULT 0")
+
+        task_cols = [r[1] for r in c.execute("PRAGMA table_info(tasks)").fetchall()]
+        if "user_id" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN user_id INTEGER DEFAULT 0")
+        if "target_accs" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN target_accs TEXT DEFAULT 'all'")
+
 def db_get_or_create_user(user_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
