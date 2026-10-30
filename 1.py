@@ -11,6 +11,7 @@ import logging
 import random
 import re
 import sqlite3
+import contextlib
 import os
 import time
 import aiohttp
@@ -116,8 +117,18 @@ log = logging.getLogger(__name__)
 
 DB_PATH = "data/bot.db"
 
+@contextlib.contextmanager
 def db_conn():
-    return sqlite3.connect(DB_PATH)
+    os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else ".", exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=60.0, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=60000;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 def db_init():
     with db_conn() as c:
@@ -226,10 +237,16 @@ def db_set_setting(key: str, value: str):
     with db_conn() as c:
         c.execute("INSERT INTO bot_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
 
-def db_inc_total_tasks():
-    with db_conn() as c:
-        current = int(db_get_setting("total_tasks_counter", "0"))
-        c.execute("INSERT INTO bot_settings (key, value) VALUES ('total_tasks_counter', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(current + 1),))
+def db_inc_total_tasks(conn=None):
+    if conn is not None:
+        row = conn.execute("SELECT value FROM bot_settings WHERE key='total_tasks_counter'").fetchone()
+        current = int(row[0]) if row and row[0] and str(row[0]).isdigit() else 0
+        conn.execute("INSERT INTO bot_settings (key, value) VALUES ('total_tasks_counter', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(current + 1),))
+    else:
+        with db_conn() as c:
+            row = c.execute("SELECT value FROM bot_settings WHERE key='total_tasks_counter'").fetchone()
+            current = int(row[0]) if row and row[0] and str(row[0]).isdigit() else 0
+            c.execute("INSERT INTO bot_settings (key, value) VALUES ('total_tasks_counter', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(current + 1),))
 
 def db_get_or_create_user(user_id: int):
     with db_conn() as c:
@@ -406,7 +423,7 @@ def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, c
                 "INSERT INTO chats (task_id, chat_id, username, title) VALUES (?,?,?,?)",
                 (task_id, ch.get("id", 0), ch.get("username",""), ch.get("title",""))
             )
-        db_inc_total_tasks()
+        db_inc_total_tasks(c)
         return task_id
 
 def db_get_task(task_id: int):
@@ -489,12 +506,16 @@ def db_get_admin_stats():
         total_accounts = c.execute("SELECT COUNT(*) FROM accounts WHERE status='active'").fetchone()[0]
         users_with_accounts = c.execute("SELECT COUNT(DISTINCT user_id) FROM accounts WHERE status='active'").fetchone()[0]
 
-        total_tasks_created = int(db_get_setting("total_tasks_counter", "0"))
+        row_cnt = c.execute("SELECT value FROM bot_settings WHERE key='total_tasks_counter'").fetchone()
+        total_tasks_created = int(row_cnt[0]) if row_cnt and row_cnt[0] and str(row_cnt[0]).isdigit() else 0
         running_tasks_count = len(running_tasks)
 
         total_referred_users = c.execute("SELECT COUNT(*) FROM users WHERE referred_by > 0").fetchone()[0]
         total_rewarded_referrals = c.execute("SELECT COUNT(*) FROM users WHERE ref_rewarded=1").fetchone()[0]
         total_bonus_awarded = c.execute("SELECT SUM(bonus_messages) FROM users").fetchone()[0] or 0
+
+        row_chan = c.execute("SELECT value FROM bot_settings WHERE key='required_channel'").fetchone()
+        req_channel = row_chan[0] if row_chan and row_chan[0] else REQUIRED_CHANNEL
 
         return {
             "total_users": total_users,
@@ -513,7 +534,7 @@ def db_get_admin_stats():
             "total_referred_users": total_referred_users,
             "total_rewarded_referrals": total_rewarded_referrals,
             "total_bonus_awarded": total_bonus_awarded,
-            "required_channel": db_get_setting("required_channel", REQUIRED_CHANNEL)
+            "required_channel": req_channel
         }
 
 # ─────────────────────────────────────────────────────
