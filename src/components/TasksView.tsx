@@ -82,10 +82,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
             triggerHaptic('medium');
             onOpenCreateModal();
           }}
-          className="px-3.5 py-1.5 rounded-xl bg-white text-black font-medium text-xs flex items-center gap-1.5 hover:bg-neutral-200 transition-colors"
+          className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center gap-1.5 transition-colors shadow-sm shadow-blue-600/30"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Создать</span>
+          <span>Создать задачу</span>
         </button>
       </div>
 
@@ -178,6 +178,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
           })
         )}
       </div>
+
+      {tasks.length > 0 && (
+        <button
+          onClick={() => {
+            triggerHaptic('medium');
+            onOpenCreateModal();
+          }}
+          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/20 active:scale-[0.98]"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Создать новую задачу</span>
+        </button>
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React from 'react';
 import { UserProfile, AccountItem, TaskItem } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { User as UserIcon } from 'lucide-react';
+import { User as UserIcon, Plus, Users, Shield, Gift } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface ProfileViewProps {
@@ -9,6 +9,9 @@ interface ProfileViewProps {
   accounts: AccountItem[];
   tasks: TaskItem[];
   onGoToTab: (tab: 'subscription' | 'accounts' | 'tasks') => void;
+  onOpenAddAccount: () => void;
+  onOpenReferrals: () => void;
+  onOpenTerms: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -16,8 +19,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   accounts,
   tasks,
   onGoToTab,
+  onOpenAddAccount,
+  onOpenReferrals,
+  onOpenTerms,
 }) => {
   const plan = SUBSCRIPTION_PLANS[user.sub_plan] || SUBSCRIPTION_PLANS.free;
+  const bonus = user.bonus_messages || 0;
+  const totalLimit = plan.daily_limit + bonus;
 
   let expiresText = 'Бессрочно';
   if (user.sub_expires_at > 0) {
@@ -32,7 +40,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   }
 
   const sentCount = user.sub_plan === 'free' ? user.free_limit_used : user.daily_sent;
-  const limitPercent = Math.min(100, Math.round((sentCount / plan.daily_limit) * 100));
+  const limitPercent = Math.min(100, Math.round((sentCount / totalLimit) * 100));
 
   return (
     <div className="space-y-3 pb-28">
@@ -69,6 +77,53 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
+      {/* Primary Profile Actions (Requested: Добавить аккаунт, Реферальная система) */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => {
+            triggerHaptic('medium');
+            onOpenAddAccount();
+          }}
+          className="py-3 px-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 active:scale-[0.98]"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Добавить аккаунт</span>
+        </button>
+
+        <button
+          onClick={() => {
+            triggerHaptic('medium');
+            onOpenReferrals();
+          }}
+          className="py-3 px-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/20 active:scale-[0.98]"
+        >
+          <Users className="w-4 h-4" />
+          <span>Реферальная система</span>
+        </button>
+      </div>
+
+      {/* Bonus Messages Banner if active */}
+      {bonus > 0 && (
+        <div className="bg-gradient-to-r from-blue-950/40 via-purple-950/30 to-blue-950/40 border border-blue-500/30 rounded-2xl p-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Gift className="w-4 h-4 text-blue-400" />
+            <div className="text-xs">
+              <span className="text-white font-medium">Реферальный бонус: </span>
+              <span className="text-blue-300">+{bonus} сообщений</span>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              triggerHaptic('light');
+              onOpenReferrals();
+            }}
+            className="text-[11px] font-medium text-blue-400 hover:text-blue-300"
+          >
+            Подробнее &rarr;
+          </button>
+        </div>
+      )}
+
       {/* Plan Details & Limits Card */}
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -92,7 +147,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div className="flex justify-between text-xs">
             <span className="text-neutral-400">Отправлено сегодня:</span>
             <span className="font-mono text-white">
-              {sentCount} <span className="text-neutral-500">/ {plan.daily_limit}</span>
+              {sentCount} <span className="text-neutral-500">/ {totalLimit}</span>
             </span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden">
@@ -101,8 +156,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               style={{ width: `${limitPercent}%` }}
             />
           </div>
-          <div className="text-[11px] text-neutral-500 font-mono">
-            Действует: {expiresText}
+          <div className="flex items-center justify-between text-[11px] text-neutral-500 font-mono">
+            <span>Действует: {expiresText}</span>
+            {bonus > 0 && <span className="text-blue-400">+{bonus} бонусных</span>}
           </div>
         </div>
       </div>
@@ -135,6 +191,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Terms & Privacy button in profile */}
+      <button
+        onClick={() => {
+          triggerHaptic('light');
+          onOpenTerms();
+        }}
+        className="w-full py-2.5 px-3 rounded-xl bg-neutral-950 border border-neutral-800/80 text-[11px] text-neutral-400 hover:text-white flex items-center justify-center gap-1.5 transition-colors"
+      >
+        <Shield className="w-3.5 h-3.5 text-neutral-500" />
+        <span>Политика конфиденциальности и условия сервиса</span>
+      </button>
     </div>
   );
 };

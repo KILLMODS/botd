@@ -10,6 +10,11 @@ export interface UserProfile {
   daily_sent: number;
   last_sent_date: string;
   free_limit_used: number;
+  terms_accepted?: number | boolean;
+  bonus_messages?: number;
+  referred_by?: number;
+  referrals_count?: number;
+  referrals_active?: number;
 }
 
 export interface AccountItem {
@@ -55,7 +60,35 @@ export interface PlanConfig {
   min_delay: number;
   price_stars: number;
   price_usd: number;
+  ref_bonus: number;
   popular?: boolean;
   badge: string;
   features: string[];
+}
+
+export interface ReferralInfo {
+  total_invited: number;
+  active_invited: number;
+  bonus_messages: number;
+  referral_link: string;
+}
+
+export interface AdminStats {
+  total_users: number;
+  terms_accepted: number;
+  clicked_add_acc: number;
+  clicked_create_task: number;
+  sub_free: number;
+  sub_pro: number;
+  sub_premium: number;
+  total_purchases_pro: number;
+  total_purchases_prem: number;
+  total_accounts: number;
+  users_with_accounts: number;
+  total_tasks_created: number;
+  running_tasks_count: number;
+  total_referred_users: number;
+  total_rewarded_referrals: number;
+  total_bonus_awarded: number;
+  required_channel?: string;
 }

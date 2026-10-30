@@ -7,7 +7,7 @@ import { triggerHaptic } from '../services/telegram';
 interface AccountsViewProps {
   accounts: AccountItem[];
   user: UserProfile;
-  onOpenAddModal: (mode: 'phone' | 'session') => void;
+  onOpenAddModal: (mode?: 'select' | 'phone' | 'session') => void;
   onDeleteAccount: (accountId: number) => Promise<void>;
   onGoToSub: () => void;
 }
@@ -60,7 +60,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         )}
       </div>
 
-      {/* Primary Actions */}
+      {/* Primary Actions (Styled matching screenshot: Green Success & Blue Primary) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <button
           onClick={() => {
@@ -70,12 +70,12 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               return;
             }
             triggerHaptic('medium');
-            onOpenAddModal('phone');
+            onOpenAddModal('select');
           }}
-          className={`py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium text-xs tracking-wide transition-all ${
+          className={`py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium text-xs tracking-wide transition-all shadow-md ${
             isLimitReached
               ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
-              : 'bg-white text-black hover:bg-neutral-200'
+              : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20 active:scale-[0.98]'
           }`}
         >
           <Plus className="w-4 h-4" />
@@ -92,7 +92,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             triggerHaptic('light');
             onOpenAddModal('session');
           }}
-          className="py-3 px-4 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-xs font-medium text-neutral-300 hover:text-white flex items-center justify-center gap-2 transition-all"
+          className="py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/20 active:scale-[0.98]"
         >
           <span>Импорт StringSession</span>
         </button>

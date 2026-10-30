@@ -12,6 +12,9 @@ import { AddAccountModal } from './components/AddAccountModal';
 import { TaskDetailModal } from './components/TaskDetailModal';
 import { CreateTaskModal } from './components/CreateTaskModal';
 import { ConnectionHelpModal } from './components/ConnectionHelpModal';
+import { ReferralModal } from './components/ReferralModal';
+import { TermsModal } from './components/TermsModal';
+import { AdminStatsModal } from './components/AdminStatsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
@@ -29,9 +32,12 @@ export default function App() {
 
   // Modals
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
-  const [addAccountMode, setAddAccountMode] = useState<'phone' | 'session'>('phone');
+  const [addAccountMode, setAddAccountMode] = useState<'select' | 'phone' | 'session'>('select');
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [isReferralOpen, setIsReferralOpen] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isAdminStatsOpen, setIsAdminStatsOpen] = useState(false);
 
   // Initialize
   useEffect(() => {
@@ -143,6 +149,12 @@ export default function App() {
     }
   };
 
+  const handleAcceptTerms = async () => {
+    if (!user) return;
+    await botApi.acceptTerms(user.user_id);
+    setUser(prev => prev ? { ...prev, terms_accepted: 1 } : null);
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white">
@@ -179,6 +191,7 @@ export default function App() {
         user={user}
         isConnected={isServerConnected}
         onOpenConnectionHelp={() => setIsConnectionHelpOpen(true)}
+        onOpenAdminStats={() => setIsAdminStatsOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -189,6 +202,12 @@ export default function App() {
             accounts={accounts}
             tasks={tasks}
             onGoToTab={(tab) => setActiveTab(tab)}
+            onOpenAddAccount={() => {
+              setAddAccountMode('select');
+              setIsAddAccountOpen(true);
+            }}
+            onOpenReferrals={() => setIsReferralOpen(true)}
+            onOpenTerms={() => setIsTermsOpen(true)}
           />
         )}
 
@@ -196,7 +215,7 @@ export default function App() {
           <AccountsView
             accounts={accounts}
             user={user}
-            onOpenAddModal={(mode) => {
+            onOpenAddModal={(mode = 'select') => {
               setAddAccountMode(mode);
               setIsAddAccountOpen(true);
             }}
@@ -224,7 +243,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Bottom Floating Navigation Dock with Sliding Indicator */}
+      {/* Bottom Floating Navigation Dock */}
       <Navbar
         activeTab={activeTab}
         onChangeTab={(tab) => setActiveTab(tab)}
@@ -232,7 +251,36 @@ export default function App() {
         tasksCount={tasks.length}
       />
 
+      {/* Initial Mandatory Terms Acceptance Prompt (if not accepted yet) */}
+      {user.terms_accepted === 0 && (
+        <TermsModal
+          isInitialPrompt={true}
+          onClose={() => {}}
+          onAccept={handleAcceptTerms}
+        />
+      )}
+
       {/* Modals */}
+      {isTermsOpen && (
+        <TermsModal
+          isInitialPrompt={false}
+          onClose={() => setIsTermsOpen(false)}
+        />
+      )}
+
+      {isReferralOpen && (
+        <ReferralModal
+          user={user}
+          onClose={() => setIsReferralOpen(false)}
+        />
+      )}
+
+      {isAdminStatsOpen && (
+        <AdminStatsModal
+          onClose={() => setIsAdminStatsOpen(false)}
+        />
+      )}
+
       {isConnectionHelpOpen && (
         <ConnectionHelpModal
           onClose={() => setIsConnectionHelpOpen(false)}
