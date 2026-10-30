@@ -1,7 +1,7 @@
 import React from 'react';
 import { UserProfile, AccountItem, TaskItem } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { Sparkles, Smartphone, Send, Zap, Clock, ShieldCheck, ChevronRight, Server } from 'lucide-react';
+import { Sparkles, Smartphone, Send, Zap, Clock, ShieldCheck, ChevronRight } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface ProfileViewProps {
@@ -9,8 +9,6 @@ interface ProfileViewProps {
   accounts: AccountItem[];
   tasks: TaskItem[];
   onGoToTab: (tab: 'subscription' | 'accounts' | 'tasks') => void;
-  onOpenSettings: () => void;
-  isBackendConnected: boolean;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -18,8 +16,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   accounts,
   tasks,
   onGoToTab,
-  onOpenSettings,
-  isBackendConnected,
 }) => {
   const plan = SUBSCRIPTION_PLANS[user.sub_plan] || SUBSCRIPTION_PLANS.free;
 
@@ -73,26 +69,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </span>
             </div>
           </div>
-        </div>
-
-        {/* Bothost / Bot sync bar */}
-        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <Server className={`w-3.5 h-3.5 ${isBackendConnected ? 'text-emerald-400' : 'text-amber-400'}`} />
-            <span className="text-slate-300 text-[11px]">
-              {isBackendConnected ? 'Синхронизировано с bothost.ru' : 'Локальный режим (готов к подключению)'}
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              triggerHaptic('light');
-              onOpenSettings();
-            }}
-            className="text-blue-400 hover:text-blue-300 text-[11px] font-medium flex items-center gap-0.5"
-          >
-            Настроить
-            <ChevronRight className="w-3 h-3" />
-          </button>
         </div>
       </div>
 

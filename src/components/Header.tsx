@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Sparkles, SlidersHorizontal, RefreshCw } from 'lucide-react';
+import { Shield, RefreshCw } from 'lucide-react';
 import { UserProfile } from '../types';
 import { triggerHaptic } from '../services/telegram';
 
@@ -7,14 +7,12 @@ interface HeaderProps {
   user: UserProfile;
   isSyncing: boolean;
   onRefresh: () => void;
-  onOpenSettings: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   user,
   isSyncing,
   onRefresh,
-  onOpenSettings
 }) => {
   return (
     <header className="sticky top-0 z-30 px-4 pt-3 pb-2 backdrop-blur-xl bg-[#090a0f]/60 border-b border-white/5">
@@ -42,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Right: Actions */}
+        {/* Right: Refresh action */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => {
@@ -51,20 +49,9 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             disabled={isSyncing}
             className="w-8 h-8 rounded-full apple-glass-button flex items-center justify-center text-slate-300 hover:text-white active:scale-90 transition-transform"
-            title="Синхронизировать с ботом"
+            title="Обновить"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-400' : ''}`} />
-          </button>
-
-          <button
-            onClick={() => {
-              triggerHaptic('light');
-              onOpenSettings();
-            }}
-            className="w-8 h-8 rounded-full apple-glass-button flex items-center justify-center text-slate-300 hover:text-white active:scale-90 transition-transform"
-            title="Настройки сервера бота"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

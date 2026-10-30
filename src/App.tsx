@@ -11,7 +11,6 @@ import { SubscriptionsView } from './components/SubscriptionsView';
 import { AddAccountModal } from './components/AddAccountModal';
 import { TaskDetailModal } from './components/TaskDetailModal';
 import { CreateTaskModal } from './components/CreateTaskModal';
-import { SettingsModal } from './components/SettingsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
@@ -19,14 +18,12 @@ export default function App() {
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isBackendConnected, setIsBackendConnected] = useState(false);
 
   // Modals
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [addAccountMode, setAddAccountMode] = useState<'phone' | 'session'>('phone');
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Initialize
   useEffect(() => {
@@ -39,19 +36,17 @@ export default function App() {
     const uid = tgUser?.id || 745950213;
 
     try {
-      const [userData, accsData, tasksData, conn] = await Promise.all([
+      const [userData, accsData, tasksData] = await Promise.all([
         botApi.getUser(uid),
         botApi.getAccounts(uid),
         botApi.getTasks(uid),
-        botApi.checkServerConnection()
       ]);
 
       setUser(userData);
       setAccounts(accsData);
       setTasks(tasksData);
-      setIsBackendConnected(conn.connected);
 
-      // Keep selectedTask updated if modal open
+      // Keep selectedTask updated if modal is open
       if (selectedTask) {
         const refreshed = tasksData.find(t => t.id === selectedTask.id);
         if (refreshed) setSelectedTask(refreshed);
@@ -63,13 +58,6 @@ export default function App() {
 
   useEffect(() => {
     loadData(true);
-
-    // Auto-polling interval for real-time bot sync
-    const interval = setInterval(() => {
-      loadData(false);
-    }, 7000);
-
-    return () => clearInterval(interval);
   }, [loadData]);
 
   // Handlers for Accounts
@@ -121,7 +109,7 @@ export default function App() {
             <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full" />
           </div>
           <div className="text-sm font-bold text-white">Загрузка Mini App...</div>
-          <div className="text-xs text-slate-400">Инициализация сессии Telegram</div>
+          <div className="text-xs text-slate-400">Инициализация профиля Telegram</div>
         </div>
       </div>
     );
@@ -138,7 +126,6 @@ export default function App() {
         user={user}
         isSyncing={isSyncing}
         onRefresh={() => loadData(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -149,8 +136,6 @@ export default function App() {
             accounts={accounts}
             tasks={tasks}
             onGoToTab={(tab) => setActiveTab(tab)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            isBackendConnected={isBackendConnected}
           />
         )}
 
@@ -222,13 +207,6 @@ export default function App() {
           accounts={accounts}
           onClose={() => setIsCreateTaskOpen(false)}
           onCreate={handleCreateTask}
-        />
-      )}
-
-      {isSettingsOpen && (
-        <SettingsModal
-          onClose={() => setIsSettingsOpen(false)}
-          onRefresh={() => loadData(true)}
         />
       )}
     </div>

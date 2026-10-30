@@ -1,7 +1,5 @@
 import { UserProfile, AccountItem, TaskItem, PlanConfig } from '../types';
-import { getTelegramUser, saveTelegramCloud, getTelegramCloud, sendTelegramData } from './telegram';
-
-export const BOTHOST_DEFAULT_URL = 'https://bot-1793274038-8713-black-kot198.bothost.tech';
+import { getTelegramUser, saveTelegramCloud, getTelegramCloud } from './telegram';
 
 export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
   free: {
@@ -64,219 +62,119 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
   }
 };
 
-const STORAGE_KEYS = {
-  USER: 'tg_broadcaster_user',
-  ACCOUNTS: 'tg_broadcaster_accounts',
-  TASKS: 'tg_broadcaster_tasks',
-  API_URL: 'tg_broadcaster_bot_url',
-};
-
-// Default mock initial data if first visit
 const DEFAULT_USER_ID = 745950213;
 
-function getInitialUser(): UserProfile {
-  const tgUser = getTelegramUser();
-  const userId = tgUser?.id || DEFAULT_USER_ID;
-  const username = tgUser?.username || 'user_demo';
-  const firstName = tgUser?.first_name || 'Пользователь';
-
-  const saved = localStorage.getItem(STORAGE_KEYS.USER);
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      return { ...parsed, user_id: userId, username, first_name: firstName };
-    } catch {
-      // fallback
-    }
-  }
-
-  return {
-    user_id: userId,
-    username,
-    first_name: firstName,
-    sub_plan: 'free',
-    sub_expires_at: 0,
-    daily_sent: 42,
-    last_sent_date: new Date().toISOString().split('T')[0],
-    free_limit_used: 42,
-  };
+function getKey(prefix: string, userId: number): string {
+  return `tgbroadcaster_${prefix}_${userId}`;
 }
 
-function getInitialAccounts(): AccountItem[] {
-  const saved = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
-  }
-  return [
-    {
-      id: 1,
-      user_id: DEFAULT_USER_ID,
-      phone: '+7 999 123-45-67',
-      status: 'active',
-      last_used: 'Только что',
-      first_name: 'Рабочий аккаунт #1'
-    }
-  ];
-}
-
-function getInitialTasks(): TaskItem[] {
-  const saved = localStorage.getItem(STORAGE_KEYS.TASKS);
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
-  }
-  return [
-    {
-      id: 101,
-      user_id: DEFAULT_USER_ID,
-      account_id: 1,
-      target_accs: 'all',
-      text: 'Приветствую! Ознакомьтесь с актуальным предложением и новыми акциями в нашем закрытом сообществе.',
-      delay_min: 10,
-      delay_max: 25,
-      status: 'stopped',
-      sent: 28,
-      errors: 1,
-      loop: 1,
-      media: 'promo_banner.jpg',
-      chats: [
-        { id: 1, chat_id: 1001, username: 'crypto_chat_ru', title: 'Crypto Chat RU', status: 'done' },
-        { id: 2, chat_id: 1002, username: 'biz_community', title: 'Business Community', status: 'pending' },
-        { id: 3, chat_id: 1003, username: 'tg_advert_group', title: 'Telegram Ads Group', status: 'pending' }
-      ]
-    }
-  ];
-}
-
-class BotSyncService {
-  private apiUrl: string = '';
-
-  constructor() {
-    const saved = localStorage.getItem(STORAGE_KEYS.API_URL);
-    this.apiUrl = saved !== null ? saved : BOTHOST_DEFAULT_URL;
-  }
-
-  getApiUrl(): string {
-    return this.apiUrl;
-  }
-
-  setApiUrl(url: string) {
-    this.apiUrl = url.trim().replace(/\/$/, '');
-    localStorage.setItem(STORAGE_KEYS.API_URL, this.apiUrl);
-  }
-
-  async checkServerConnection(): Promise<{ connected: boolean; message: string }> {
-    if (!this.apiUrl) {
-      return { connected: false, message: 'URL сервера бота не указан (работает локальная синхронизация)' };
-    }
-    try {
-      const res = await fetch(`${this.apiUrl}/api/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
-      if (res.ok) {
-        const data = await res.json();
-        return { connected: true, message: data.message || 'Связь с bothost.ru активна' };
-      }
-      return { connected: false, message: `Ошибка сервера: ${res.status}` };
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      return { connected: false, message: `Не удалось связаться с сервером (${errorMessage})` };
-    }
-  }
-
+class UserIsolatedDataService {
   async getUser(userId: number): Promise<UserProfile> {
-    if (this.apiUrl) {
+    const key = getKey('user', userId);
+    const tgUser = getTelegramUser();
+    const fallbackName = tgUser?.first_name || 'Пользователь';
+    const fallbackUsername = tgUser?.username || '';
+
+    // Check CloudStorage first
+    const cloudVal = await getTelegramCloud(key);
+    if (cloudVal) {
       try {
-        const res = await fetch(`${this.apiUrl}/api/user?user_id=${userId}`);
-        if (res.ok) {
-          const user = await res.json();
-          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-          return user;
-        }
+        const parsed = JSON.parse(cloudVal);
+        return { ...parsed, user_id: userId, first_name: fallbackName, username: fallbackUsername };
       } catch {
-        // fallback to storage
+        // fallback
       }
     }
-    return getInitialUser();
+
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...parsed, user_id: userId, first_name: fallbackName, username: fallbackUsername };
+      } catch {
+        // fallback
+      }
+    }
+
+    const newUser: UserProfile = {
+      user_id: userId || DEFAULT_USER_ID,
+      username: fallbackUsername,
+      first_name: fallbackName,
+      sub_plan: 'free',
+      sub_expires_at: 0,
+      daily_sent: 0,
+      last_sent_date: new Date().toISOString().split('T')[0],
+      free_limit_used: 0,
+    };
+
+    localStorage.setItem(key, JSON.stringify(newUser));
+    saveTelegramCloud(key, JSON.stringify(newUser));
+    return newUser;
   }
 
   async getAccounts(userId: number): Promise<AccountItem[]> {
-    if (this.apiUrl) {
+    const key = getKey('accounts', userId);
+
+    const cloudVal = await getTelegramCloud(key);
+    if (cloudVal) {
       try {
-        const res = await fetch(`${this.apiUrl}/api/accounts?user_id=${userId}`);
-        if (res.ok) {
-          const accs = await res.json();
-          localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
-          return accs;
-        }
+        return JSON.parse(cloudVal);
       } catch {
         // fallback
       }
     }
-    return getInitialAccounts();
+
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback
+      }
+    }
+
+    return [];
   }
 
   async getTasks(userId: number): Promise<TaskItem[]> {
-    if (this.apiUrl) {
+    const key = getKey('tasks', userId);
+
+    const cloudVal = await getTelegramCloud(key);
+    if (cloudVal) {
       try {
-        const res = await fetch(`${this.apiUrl}/api/tasks?user_id=${userId}`);
-        if (res.ok) {
-          const tasks = await res.json();
-          localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
-          return tasks;
-        }
+        return JSON.parse(cloudVal);
       } catch {
         // fallback
       }
     }
-    return getInitialTasks();
+
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback
+      }
+    }
+
+    return [];
   }
 
   // --- Auth Flow for adding account ---
-  async authSendCode(userId: number, phone: string): Promise<{ ok: boolean; phone_hash?: string; error?: string }> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/auth/send_code`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, phone })
-        });
-        return await res.json();
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        return { ok: false, error: errorMessage };
-      }
-    }
-    // Simulation / local fallback
-    await new Promise(r => setTimeout(r, 900));
-    return { ok: true, phone_hash: 'simulated_hash_' + Date.now() };
+  async authSendCode(_userId: number, _phone: string): Promise<{ ok: boolean; phone_hash?: string; error?: string }> {
+    await new Promise(r => setTimeout(r, 700));
+    return { ok: true, phone_hash: 'hash_' + Date.now() };
   }
 
-  async authConfirmCode(userId: number, phone: string, code: string, phone_hash?: string): Promise<{ ok: boolean; need_2fa?: boolean; account?: AccountItem; error?: string }> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/auth/confirm_code`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, phone, code, phone_hash })
-        });
-        return await res.json();
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        return { ok: false, error: errorMessage };
-      }
-    }
-    // Simulation
-    await new Promise(r => setTimeout(r, 900));
+  async authConfirmCode(userId: number, phone: string, code: string, _phone_hash?: string): Promise<{ ok: boolean; need_2fa?: boolean; account?: AccountItem; error?: string }> {
+    await new Promise(r => setTimeout(r, 700));
     if (code === '22222') {
       return { ok: true, need_2fa: true };
     }
-    const accs = getInitialAccounts();
+
+    const key = getKey('accounts', userId);
+    const accs = await this.getAccounts(userId);
+
     const newAcc: AccountItem = {
       id: Date.now(),
       user_id: userId,
@@ -285,27 +183,18 @@ class BotSyncService {
       last_used: 'Только что',
       first_name: 'Аккаунт ' + phone.slice(-4)
     };
+
     accs.push(newAcc);
-    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
+    localStorage.setItem(key, JSON.stringify(accs));
+    saveTelegramCloud(key, JSON.stringify(accs));
     return { ok: true, need_2fa: false, account: newAcc };
   }
 
-  async authConfirm2FA(userId: number, phone: string, password: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/auth/confirm_2fa`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, phone, password })
-        });
-        return await res.json();
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        return { ok: false, error: errorMessage };
-      }
-    }
-    await new Promise(r => setTimeout(r, 1000));
-    const accs = getInitialAccounts();
+  async authConfirm2FA(userId: number, phone: string, _password: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
+    await new Promise(r => setTimeout(r, 800));
+    const key = getKey('accounts', userId);
+    const accs = await this.getAccounts(userId);
+
     const newAcc: AccountItem = {
       id: Date.now(),
       user_id: userId,
@@ -314,27 +203,18 @@ class BotSyncService {
       last_used: 'Только что',
       first_name: 'Аккаунт ' + phone.slice(-4)
     };
+
     accs.push(newAcc);
-    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
+    localStorage.setItem(key, JSON.stringify(accs));
+    saveTelegramCloud(key, JSON.stringify(accs));
     return { ok: true, account: newAcc };
   }
 
-  async addAccountBySession(userId: number, sessionStr: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/auth/add_session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, session: sessionStr })
-        });
-        return await res.json();
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        return { ok: false, error: errorMessage };
-      }
-    }
-    await new Promise(r => setTimeout(r, 800));
-    const accs = getInitialAccounts();
+  async addAccountBySession(userId: number, _sessionStr: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
+    await new Promise(r => setTimeout(r, 600));
+    const key = getKey('accounts', userId);
+    const accs = await this.getAccounts(userId);
+
     const newAcc: AccountItem = {
       id: Date.now(),
       user_id: userId,
@@ -343,45 +223,30 @@ class BotSyncService {
       last_used: 'Импортирован из session',
       first_name: 'Импортированная сессия'
     };
+
     accs.push(newAcc);
-    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
+    localStorage.setItem(key, JSON.stringify(accs));
+    saveTelegramCloud(key, JSON.stringify(accs));
     return { ok: true, account: newAcc };
   }
 
   async deleteAccount(userId: number, accountId: number): Promise<boolean> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/accounts/${accountId}?user_id=${userId}`, { method: 'DELETE' });
-        if (res.ok) return true;
-      } catch {
-        // fallback
-      }
-    }
-    const accs = getInitialAccounts().filter(a => a.id !== accountId);
-    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
+    const key = getKey('accounts', userId);
+    const accs = (await this.getAccounts(userId)).filter(a => a.id !== accountId);
+    localStorage.setItem(key, JSON.stringify(accs));
+    saveTelegramCloud(key, JSON.stringify(accs));
     return true;
   }
 
   // --- Tasks API ---
   async createTask(task: Partial<TaskItem>): Promise<TaskItem> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/tasks`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(task)
-        });
-        if (res.ok) {
-          return await res.json();
-        }
-      } catch {
-        // fallback
-      }
-    }
-    const tasks = getInitialTasks();
+    const userId = task.user_id || DEFAULT_USER_ID;
+    const key = getKey('tasks', userId);
+    const tasks = await this.getTasks(userId);
+
     const newTask: TaskItem = {
       id: Math.floor(100 + Math.random() * 900),
-      user_id: task.user_id || DEFAULT_USER_ID,
+      user_id: userId,
       account_id: task.account_id || 0,
       target_accs: task.target_accs || 'all',
       text: task.text || '',
@@ -394,29 +259,24 @@ class BotSyncService {
       media: task.media || null,
       chats: task.chats || []
     };
+
     tasks.unshift(newTask);
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    localStorage.setItem(key, JSON.stringify(tasks));
+    saveTelegramCloud(key, JSON.stringify(tasks));
     return newTask;
   }
 
   async updateTask(taskId: number, updates: Partial<TaskItem>): Promise<TaskItem | null> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates)
-        });
-        if (res.ok) return await res.json();
-      } catch {
-        // fallback
-      }
-    }
-    const tasks = getInitialTasks();
+    const tgUser = getTelegramUser();
+    const userId = tgUser?.id || DEFAULT_USER_ID;
+    const key = getKey('tasks', userId);
+    const tasks = await this.getTasks(userId);
+
     const idx = tasks.findIndex(t => t.id === taskId);
     if (idx !== -1) {
       tasks[idx] = { ...tasks[idx], ...updates };
-      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+      localStorage.setItem(key, JSON.stringify(tasks));
+      saveTelegramCloud(key, JSON.stringify(tasks));
       return tasks[idx];
     }
     return null;
@@ -424,79 +284,43 @@ class BotSyncService {
 
   async toggleTaskRun(taskId: number, currentStatus: string): Promise<string> {
     const nextStatus = currentStatus === 'running' ? 'stopped' : 'running';
-    if (this.apiUrl) {
-      try {
-        const endpoint = nextStatus === 'running' ? 'start' : 'stop';
-        const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}/${endpoint}`, { method: 'POST' });
-        if (res.ok) {
-          const data = await res.json();
-          return data.status || nextStatus;
-        }
-      } catch {
-        // fallback
-      }
-    }
-    const tasks = getInitialTasks();
+    const tgUser = getTelegramUser();
+    const userId = tgUser?.id || DEFAULT_USER_ID;
+    const key = getKey('tasks', userId);
+    const tasks = await this.getTasks(userId);
+
     const t = tasks.find(x => x.id === taskId);
     if (t) {
       t.status = nextStatus as TaskItem['status'];
-      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+      localStorage.setItem(key, JSON.stringify(tasks));
+      saveTelegramCloud(key, JSON.stringify(tasks));
     }
     return nextStatus;
   }
 
   async deleteTask(taskId: number): Promise<boolean> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}`, { method: 'DELETE' });
-        if (res.ok) return true;
-      } catch {
-        // fallback
-      }
-    }
-    const tasks = getInitialTasks().filter(t => t.id !== taskId);
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    const tgUser = getTelegramUser();
+    const userId = tgUser?.id || DEFAULT_USER_ID;
+    const key = getKey('tasks', userId);
+    const tasks = (await this.getTasks(userId)).filter(t => t.id !== taskId);
+    localStorage.setItem(key, JSON.stringify(tasks));
+    saveTelegramCloud(key, JSON.stringify(tasks));
     return true;
   }
 
   // --- Subscriptions ---
   async activateSubscription(userId: number, plan: PlanConfig['id'], days: number = 30): Promise<UserProfile> {
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/subscription/activate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, plan, days })
-        });
-        if (res.ok) return await res.json();
-      } catch {
-        // fallback
-      }
-    }
-    const user = getInitialUser();
+    const key = getKey('user', userId);
+    const user = await this.getUser(userId);
     user.sub_plan = plan;
     user.sub_expires_at = Math.floor(Date.now() / 1000) + days * 86400;
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    localStorage.setItem(key, JSON.stringify(user));
+    saveTelegramCloud(key, JSON.stringify(user));
     return user;
   }
 
-  async createCryptoInvoice(userId: number, plan: PlanConfig['id']): Promise<{ ok: boolean; invoice_url?: string; invoice_id?: number; error?: string }> {
-    const planInfo = SUBSCRIPTION_PLANS[plan];
-    if (this.apiUrl) {
-      try {
-        const res = await fetch(`${this.apiUrl}/api/subscription/cryptobot_invoice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, plan, amount_usd: planInfo.price_usd })
-        });
-        return await res.json();
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        return { ok: false, error: errorMessage };
-      }
-    }
-    // Simulation
-    await new Promise(r => setTimeout(r, 600));
+  async createCryptoInvoice(_userId: number, _plan: PlanConfig['id']): Promise<{ ok: boolean; invoice_url?: string; invoice_id?: number; error?: string }> {
+    await new Promise(r => setTimeout(r, 500));
     return {
       ok: true,
       invoice_url: `https://t.me/CryptoBot?start=IV_${Date.now()}`,
@@ -505,4 +329,4 @@ class BotSyncService {
   }
 }
 
-export const botApi = new BotSyncService();
+export const botApi = new UserIsolatedDataService();
