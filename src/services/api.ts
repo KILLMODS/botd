@@ -2,6 +2,7 @@ import { UserProfile, AccountItem, TaskItem, PlanConfig, ReferralInfo, AdminStat
 import { getTelegramUser, saveTelegramCloud, getTelegramCloud } from './telegram';
 
 export const BOT_TOKEN = '8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE';
+export const BOT_USERNAME = 'KillmodsLTDBot';
 export const CRYPTO_BOT_TOKEN = '662370:AARfAYc3i7xelw6VdEomWOY043wF8cQ4wGb';
 export const BOTHOST_URL = 'https://bot-1793274038-8713-black-kot198.bothost.tech';
 
@@ -696,7 +697,7 @@ class BotSyncService {
       total_invited: u.referrals_count || 0,
       active_invited: u.referrals_active || 0,
       bonus_messages: u.bonus_messages || 0,
-      referral_link: `https://t.me/tg_broadcaster_bot?start=ref_${userId}`
+      referral_link: `https://t.me/${BOT_USERNAME}?start=ref_${userId}`
     };
   }
 

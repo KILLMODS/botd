@@ -37,6 +37,7 @@ API_ID           = int(os.environ.get("API_ID", "30973996"))
 API_HASH         = os.environ.get("API_HASH", "dc58ef881ea53b1faafcf6ad974306a7")
 
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE")
+BOT_USERNAME     = os.environ.get("BOT_USERNAME", "KillmodsLTDBot").replace("@", "")
 ADMIN_IDS        = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "1793274038, 7459502130, 8658384308").split(",") if x.strip()]
 
 # Ключ CryptoBot
@@ -1199,7 +1200,7 @@ async def check_channel_subscription(bot: TelegramClient, user_id: int) -> tuple
 
 def register_handlers(bot: TelegramClient):
 
-    bot_username_cache = {"username": "tg_broadcaster_bot"}
+    bot_username_cache = {"username": BOT_USERNAME}
 
     async def get_bot_username():
         try:
@@ -1209,7 +1210,7 @@ def register_handlers(bot: TelegramClient):
                 return me.username
         except Exception:
             pass
-        return bot_username_cache["username"]
+        return bot_username_cache.get("username", BOT_USERNAME)
 
     @bot.on(events.NewMessage(pattern=r"^/start(?:\s+(.+))?"))
     async def start_cmd(e):
@@ -2048,9 +2049,9 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
         stats = db_get_referral_stats(uid)
         try:
             me = await bot.get_me()
-            bname = me.username if me else "tg_broadcaster_bot"
+            bname = me.username if me and me.username else BOT_USERNAME
         except Exception:
-            bname = "tg_broadcaster_bot"
+            bname = BOT_USERNAME
         stats["referral_link"] = f"https://t.me/{bname}?start=ref_{uid}"
         return web.json_response(stats)
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Users, Copy, Check, Share2, Gift, Sparkles, ShieldCheck } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
-import { botApi, SUBSCRIPTION_PLANS } from '../services/api';
+import { botApi, SUBSCRIPTION_PLANS, BOT_USERNAME } from '../services/api';
 import { ReferralInfo, UserProfile } from '../types';
 
 interface ReferralModalProps {
@@ -15,7 +15,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({ user, onClose }) =
     total_invited: user.referrals_count || 0,
     active_invited: user.referrals_active || 0,
     bonus_messages: user.bonus_messages || 0,
-    referral_link: `https://t.me/tg_broadcaster_bot?start=ref_${user.user_id}`
+    referral_link: `https://t.me/${BOT_USERNAME}?start=ref_${user.user_id}`
   });
   const [isLoading, setIsLoading] = useState(true);
 
