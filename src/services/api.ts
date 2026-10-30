@@ -1,5 +1,7 @@
 import { UserProfile, AccountItem, TaskItem, PlanConfig } from '../types';
-import { getTelegramUser } from './telegram';
+import { getTelegramUser, saveTelegramCloud, getTelegramCloud, sendTelegramData } from './telegram';
+
+export const BOTHOST_DEFAULT_URL = 'https://bot-1793274038-8713-black-kot198.bothost.tech';
 
 export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
   free: {
@@ -157,7 +159,8 @@ class BotSyncService {
   private apiUrl: string = '';
 
   constructor() {
-    this.apiUrl = localStorage.getItem(STORAGE_KEYS.API_URL) || '';
+    const saved = localStorage.getItem(STORAGE_KEYS.API_URL);
+    this.apiUrl = saved !== null ? saved : BOTHOST_DEFAULT_URL;
   }
 
   getApiUrl(): string {

@@ -56,6 +56,13 @@ declare global {
           notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
           selectionChanged: () => void;
         };
+        CloudStorage: {
+          setItem: (key: string, value: string, callback?: (error: Error | null, success?: boolean) => void) => void;
+          getItem: (key: string, callback: (error: Error | null, value?: string) => void) => void;
+          getItems: (keys: string[], callback: (error: Error | null, values?: Record<string, string>) => void) => void;
+          removeItem: (key: string, callback?: (error: Error | null, success?: boolean) => void) => void;
+        };
+        sendData: (data: string) => void;
         openTelegramLink: (url: string) => void;
         openInvoice: (url: string, callback?: (status: string) => void) => void;
         showPopup: (params: { title?: string; message: string; buttons?: Array<{ id?: string; type?: string; text: string }> }, callback?: (buttonId: string) => void) => void;
@@ -112,3 +119,53 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'selection' |
     // fallback
   }
 }
+
+export function saveTelegramCloud(key: string, value: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const cs = window.Telegram?.WebApp?.CloudStorage;
+    if (!cs) {
+      resolve(false);
+      return;
+    }
+    try {
+      cs.setItem(key, value, (err) => {
+        resolve(!err);
+      });
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+export function getTelegramCloud(key: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const cs = window.Telegram?.WebApp?.CloudStorage;
+    if (!cs) {
+      resolve(null);
+      return;
+    }
+    try {
+      cs.getItem(key, (err, val) => {
+        if (!err && val) {
+          resolve(val);
+        } else {
+          resolve(null);
+        }
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+export function sendTelegramData(data: Record<string, unknown>): boolean {
+  const webapp = window.Telegram?.WebApp;
+  if (!webapp || !webapp.sendData) return false;
+  try {
+    webapp.sendData(JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+

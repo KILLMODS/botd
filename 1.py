@@ -1718,7 +1718,7 @@ async def main():
     # Запуск aiohttp REST API сервера для Mini App
     api_app = web.Application(middlewares=[cors_middleware])
     init_api_routes(api_app, bot)
-    web_port = int(os.environ.get("WEB_PORT", "8080"))
+    web_port = int(os.environ.get("PORT", os.environ.get("WEB_PORT", "3000")))
     runner = web.AppRunner(api_app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", web_port)

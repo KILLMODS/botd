@@ -72,11 +72,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               type="url"
               value={apiUrl}
               onChange={(e) => setApiUrl(e.target.value)}
-              placeholder="https://bothost.ru:8080 или пусто для офлайн-режима"
+              placeholder="https://bot-1793274038-8713-black-kot198.bothost.tech"
               className="w-full px-3 py-2.5 rounded-2xl apple-glass-input text-white text-xs font-mono outline-none"
             />
-            <p className="text-[11px] text-slate-400">
-              Если оставить пустым — мини-апп работает в быстром автономном режиме с сохранением в браузере Telegram.
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setApiUrl('https://bot-1793274038-8713-black-kot198.bothost.tech')}
+                className="text-[11px] text-blue-400 hover:text-blue-300 underline"
+              >
+                Вставить домен из bothost: bot-1793...bothost.tech
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
+              💡 <strong>Как это работает на bothost.ru:</strong> Во вкладке «Домен» у вас включен порт 3000 и выдан домен <span className="font-mono text-blue-300">bothost.tech</span>. Скрипт <span className="font-mono text-slate-200">1.py</span> настроен слушать именно порт 3000 внутри контейнера. Поэтому сервер bothost.ru автоматически проксирует все запросы из Vercel прямо в бота!
             </p>
           </div>
 
