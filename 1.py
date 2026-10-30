@@ -1246,6 +1246,23 @@ async def check_channel_subscription(bot: TelegramClient, user_id: int) -> tuple
 
     return True, ""
 
+async def send_start_sticker(chat_id: int):
+    if not START_STICKER_ID or not BOT_TOKEN:
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendSticker"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json={"chat_id": chat_id, "sticker": START_STICKER_ID},
+                timeout=aiohttp.ClientTimeout(total=6)
+            ) as resp:
+                data = await resp.json()
+                if not data.get("ok"):
+                    log.warning(f"Ошибка отправки стикера через Bot API: {data.get('description')}")
+    except Exception as ex:
+        log.warning(f"Не удалось отправить стартовый стикер через Bot API: {ex}")
+
 # ─────────────────────────────────────────────────────
 #  ХЕНДЛЕРЫ И FSM
 # ─────────────────────────────────────────────────────
@@ -1307,11 +1324,7 @@ def register_handlers(bot: TelegramClient):
             return
 
         # Отправка стартового стикера перед сообщением с кнопками главного меню
-        if START_STICKER_ID:
-            try:
-                await bot.send_file(uid, START_STICKER_ID)
-            except Exception as ex:
-                log.warning(f"Не удалось отправить стартовый стикер: {ex}")
+        await send_start_sticker(uid)
 
         await e.respond(welcome_text(uid), buttons=main_menu_keyboard(uid))
 
