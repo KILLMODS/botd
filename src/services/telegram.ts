@@ -19,6 +19,7 @@ declare global {
           hash?: string;
         };
         version: string;
+        isVersionAtLeast?: (version: string) => boolean;
         platform: string;
         colorScheme: 'light' | 'dark';
         themeParams: Record<string, string>;
@@ -120,8 +121,26 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'selection' |
   }
 }
 
+export function isCloudStorageSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  const webapp = window.Telegram?.WebApp;
+  if (!webapp) return false;
+  try {
+    if (typeof webapp.isVersionAtLeast === 'function') {
+      return webapp.isVersionAtLeast('6.9');
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export function saveTelegramCloud(key: string, value: string): Promise<boolean> {
   return new Promise((resolve) => {
+    if (!isCloudStorageSupported()) {
+      resolve(false);
+      return;
+    }
     const cs = window.Telegram?.WebApp?.CloudStorage;
     if (!cs) {
       resolve(false);
@@ -139,6 +158,10 @@ export function saveTelegramCloud(key: string, value: string): Promise<boolean> 
 
 export function getTelegramCloud(key: string): Promise<string | null> {
   return new Promise((resolve) => {
+    if (!isCloudStorageSupported()) {
+      resolve(null);
+      return;
+    }
     const cs = window.Telegram?.WebApp?.CloudStorage;
     if (!cs) {
       resolve(null);

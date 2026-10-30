@@ -36,7 +36,7 @@ API_ID           = int(os.environ.get("API_ID", "30973996"))
 API_HASH         = os.environ.get("API_HASH", "dc58ef881ea53b1faafcf6ad974306a7")
 
 BOT_TOKEN        = os.environ.get("BOT_TOKEN", "8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE")
-ADMIN_IDS        = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "7459502130, 8658384308").split(",") if x.strip()]
+ADMIN_IDS        = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "1793274038, 7459502130, 8658384308").split(",") if x.strip()]
 
 # Ключ CryptoBot
 CRYPTO_BOT_TOKEN = os.environ.get("CRYPTO_BOT_TOKEN", "662370:AARfAYc3i7xelw6VdEomWOY043wF8cQ4wGb")
@@ -151,9 +151,16 @@ def db_get_or_create_user(user_id: int):
         c.row_factory = sqlite3.Row
         u = c.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
         if not u:
-            c.execute("INSERT INTO users (user_id, sub_plan, sub_expires_at, free_limit_used) VALUES (?, 'free', 0, 0)", (user_id,))
+            default_plan = 'premium' if user_id in ADMIN_IDS else 'free'
+            default_exp = int(time.time()) + 365*86400 if user_id in ADMIN_IDS else 0
+            c.execute("INSERT INTO users (user_id, sub_plan, sub_expires_at, free_limit_used) VALUES (?, ?, ?, 0)", (user_id, default_plan, default_exp))
             u = c.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
-        return dict(u)
+        res = dict(u)
+        if user_id in ADMIN_IDS and res.get("sub_plan") == "free":
+            res["sub_plan"] = "premium"
+            res["sub_expires_at"] = int(time.time()) + 365*86400
+            c.execute("UPDATE users SET sub_plan='premium', sub_expires_at=? WHERE user_id=?", (res["sub_expires_at"], user_id))
+        return res
 
 def db_get_all_users():
     with db_conn() as c:
@@ -225,11 +232,16 @@ def db_get_account_by_id(acc_id: int):
 def db_get_user_accounts(user_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute("SELECT * FROM accounts WHERE user_id=? ORDER BY id", (user_id,)).fetchall()]
+        if user_id in ADMIN_IDS or not user_id:
+            return [dict(r) for r in c.execute("SELECT * FROM accounts ORDER BY id").fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM accounts WHERE user_id=? OR user_id=0 OR user_id IS NULL ORDER BY id", (user_id,)).fetchall()]
 
 def db_delete_account(phone: str, user_id: int):
     with db_conn() as c:
-        c.execute("DELETE FROM accounts WHERE phone=? AND user_id=?", (phone, user_id))
+        if user_id in ADMIN_IDS:
+            c.execute("DELETE FROM accounts WHERE phone=?", (phone,))
+        else:
+            c.execute("DELETE FROM accounts WHERE phone=? AND (user_id=? OR user_id=0 OR user_id IS NULL)", (phone, user_id))
 
 def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, chats: list, delay_min: int, delay_max: int, loop=False, media=None):
     with db_conn() as c:
@@ -254,7 +266,9 @@ def db_get_task(task_id: int):
 def db_get_user_tasks(user_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute("SELECT * FROM tasks WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()]
+        if user_id in ADMIN_IDS or not user_id:
+            return [dict(r) for r in c.execute("SELECT * FROM tasks ORDER BY id DESC").fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM tasks WHERE user_id=? OR user_id=0 OR user_id IS NULL ORDER BY id DESC", (user_id,)).fetchall()]
 
 def db_set_task_status(task_id: int, status: str):
     with db_conn() as c:
@@ -1708,14 +1722,7 @@ async def main():
         lang_code="ru"
     )
 
-    try:
-        await bot.start(bot_token=BOT_TOKEN)
-        log.info("Бот рассылки и управления запущен ✅")
-        register_handlers(bot)
-    except Exception as ex:
-        log.warning(f"Не удалось запустить Telegram bot клиент ({ex}). API сервер продолжает работу.")
-
-    # Запуск aiohttp REST API сервера для Mini App
+    # Запуск aiohttp REST API сервера для Mini App ПЕРВЫМ ДЕЛОМ на порту 3000
     api_app = web.Application(middlewares=[cors_middleware])
     init_api_routes(api_app, bot)
     web_port = int(os.environ.get("PORT", os.environ.get("WEB_PORT", "3000")))
@@ -1724,6 +1731,13 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", web_port)
     await site.start()
     log.info(f"API сервер для Telegram Mini App запущен на http://0.0.0.0:{web_port} ✅")
+
+    try:
+        await bot.start(bot_token=BOT_TOKEN)
+        log.info("Бот рассылки и управления запущен ✅")
+        register_handlers(bot)
+    except Exception as ex:
+        log.warning(f"Не удалось запустить Telegram bot клиент ({ex}). API сервер продолжает работу.")
 
     asyncio.create_task(_auth_sessions_gc_loop())
     await bot.run_until_disconnected()

@@ -4,9 +4,11 @@ import { UserProfile } from '../types';
 
 interface HeaderProps {
   user: UserProfile;
+  isConnected?: boolean;
+  onOpenConnectionHelp?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user }) => {
+export const Header: React.FC<HeaderProps> = ({ user, isConnected = false, onOpenConnectionHelp }) => {
   return (
     <header className="sticky top-0 z-30 px-4 pt-3 pb-2.5 backdrop-blur-2xl bg-black/80 border-b border-white/10 select-none">
       <div className="max-w-md mx-auto flex items-center justify-between">
@@ -48,6 +50,25 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
             </div>
           </div>
         </div>
+
+        {/* Sync Status Badge */}
+        {onOpenConnectionHelp && (
+          <button
+            onClick={onOpenConnectionHelp}
+            className={`px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium flex items-center gap-1.5 transition-all ${
+              isConnected
+                ? 'bg-neutral-900 border-white/30 text-white'
+                : 'bg-neutral-950 border-white/20 text-neutral-400 hover:border-white/40'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isConnected ? 'bg-white animate-pulse' : 'bg-neutral-600'
+              }`}
+            />
+            <span>{isConnected ? 'bothost' : 'офлайн'}</span>
+          </button>
+        )}
       </div>
     </header>
   );

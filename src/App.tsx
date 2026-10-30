@@ -11,6 +11,7 @@ import { SubscriptionsView } from './components/SubscriptionsView';
 import { AddAccountModal } from './components/AddAccountModal';
 import { TaskDetailModal } from './components/TaskDetailModal';
 import { CreateTaskModal } from './components/CreateTaskModal';
+import { ConnectionHelpModal } from './components/ConnectionHelpModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
@@ -18,6 +19,8 @@ export default function App() {
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isServerConnected, setIsServerConnected] = useState(false);
+  const [isConnectionHelpOpen, setIsConnectionHelpOpen] = useState(false);
 
   // Pull to refresh
   const [pullDistance, setPullDistance] = useState(0);
@@ -38,7 +41,7 @@ export default function App() {
   const loadData = useCallback(async (showIndicator = false) => {
     if (showIndicator) setIsSyncing(true);
     const tgUser = getTelegramUser();
-    const uid = tgUser?.id || 745950213;
+    const uid = tgUser?.id || 1793274038;
 
     try {
       const [userData, accsData, tasksData] = await Promise.all([
@@ -50,6 +53,7 @@ export default function App() {
       setUser(userData);
       setAccounts(accsData);
       setTasks(tasksData);
+      setIsServerConnected(botApi.isConnected);
 
       if (selectedTask) {
         const refreshed = tasksData.find(t => t.id === selectedTask.id);
@@ -171,7 +175,11 @@ export default function App() {
       )}
 
       {/* Top Header */}
-      <Header user={user} />
+      <Header
+        user={user}
+        isConnected={isServerConnected}
+        onOpenConnectionHelp={() => setIsConnectionHelpOpen(true)}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3">
@@ -225,6 +233,15 @@ export default function App() {
       />
 
       {/* Modals */}
+      {isConnectionHelpOpen && (
+        <ConnectionHelpModal
+          onClose={() => setIsConnectionHelpOpen(false)}
+          onRefreshData={async () => {
+            await loadData(true);
+          }}
+        />
+      )}
+
       {isAddAccountOpen && (
         <AddAccountModal
           userId={user.user_id}

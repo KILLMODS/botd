@@ -63,7 +63,8 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
   }
 };
 
-const DEFAULT_USER_ID = 745950213;
+export const ADMIN_USER_IDS = [1793274038, 7459502130, 8658384308];
+const DEFAULT_USER_ID = 1793274038;
 
 function getKey(prefix: string, userId: number): string {
   return `tgbroadcast_${prefix}_${userId}`;
@@ -71,6 +72,27 @@ function getKey(prefix: string, userId: number): string {
 
 class BotSyncService {
   private apiUrl: string = BOTHOST_URL;
+  public isConnected: boolean = false;
+  public lastError: string | null = null;
+
+  async checkHealth(): Promise<{ ok: boolean; message: string }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/health`, { signal: AbortSignal.timeout(3500) });
+      if (res.ok) {
+        this.isConnected = true;
+        this.lastError = null;
+        return { ok: true, message: 'Сервер бота на bothost.ru подключен' };
+      }
+      this.isConnected = false;
+      this.lastError = `Сервер ответил со статусом ${res.status}`;
+      return { ok: false, message: this.lastError };
+    } catch (e: unknown) {
+      this.isConnected = false;
+      const msg = e instanceof Error ? e.message : String(e);
+      this.lastError = msg;
+      return { ok: false, message: `bothost.ru недоступен (${msg})` };
+    }
+  }
 
   // --- USER DATA ---
   async getUser(userId: number): Promise<UserProfile> {
@@ -78,6 +100,7 @@ class BotSyncService {
     const fallbackName = tgUser?.first_name || 'Пользователь';
     const fallbackUsername = tgUser?.username || '';
     const photoUrl = tgUser?.photo_url || '';
+    const isOwnerOrAdmin = ADMIN_USER_IDS.includes(Number(userId));
 
     // 1. Fetch real user from bothost SQLite database
     try {
@@ -86,14 +109,16 @@ class BotSyncService {
         signal: AbortSignal.timeout(4000)
       });
       if (res.ok) {
+        this.isConnected = true;
+        this.lastError = null;
         const u = await res.json();
         const profile: UserProfile = {
           user_id: u.user_id || userId,
           username: u.username || fallbackUsername,
           first_name: u.first_name || fallbackName,
           photo_url: photoUrl,
-          sub_plan: u.sub_plan || 'free',
-          sub_expires_at: u.sub_expires_at || 0,
+          sub_plan: (isOwnerOrAdmin && u.sub_plan === 'free') ? 'premium' : (u.sub_plan || (isOwnerOrAdmin ? 'premium' : 'free')),
+          sub_expires_at: u.sub_expires_at || (isOwnerOrAdmin ? Math.floor(Date.now() / 1000) + 365 * 86400 : 0),
           daily_sent: u.daily_sent || 0,
           last_sent_date: u.last_sent_date || new Date().toISOString().split('T')[0],
           free_limit_used: u.free_limit_used || 0,
@@ -103,8 +128,9 @@ class BotSyncService {
         saveTelegramCloud(key, JSON.stringify(profile));
         return profile;
       }
-    } catch {
-      // bothost loading or starting
+    } catch (e: unknown) {
+      this.isConnected = false;
+      this.lastError = e instanceof Error ? e.message : String(e);
     }
 
     // 2. Fall back to cached CloudStorage or LocalStorage
@@ -113,6 +139,10 @@ class BotSyncService {
     if (cloudVal) {
       try {
         const parsed = JSON.parse(cloudVal);
+        if (isOwnerOrAdmin && parsed.sub_plan === 'free') {
+          parsed.sub_plan = 'premium';
+          parsed.sub_expires_at = Math.floor(Date.now() / 1000) + 365 * 86400;
+        }
         return { ...parsed, user_id: userId, first_name: fallbackName, username: fallbackUsername, photo_url: photoUrl };
       } catch {
         // continue
@@ -123,20 +153,27 @@ class BotSyncService {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (isOwnerOrAdmin && parsed.sub_plan === 'free') {
+          parsed.sub_plan = 'premium';
+          parsed.sub_expires_at = Math.floor(Date.now() / 1000) + 365 * 86400;
+        }
         return { ...parsed, user_id: userId, first_name: fallbackName, username: fallbackUsername, photo_url: photoUrl };
       } catch {
         // continue
       }
     }
 
-    // Default
+    // Default with admin recognition
+    const defaultPlan = isOwnerOrAdmin ? 'premium' : 'free';
+    const defaultExp = isOwnerOrAdmin ? Math.floor(Date.now() / 1000) + 365 * 86400 : 0;
+
     return {
       user_id: userId || DEFAULT_USER_ID,
       username: fallbackUsername,
       first_name: fallbackName,
       photo_url: photoUrl,
-      sub_plan: 'free',
-      sub_expires_at: 0,
+      sub_plan: defaultPlan,
+      sub_expires_at: defaultExp,
       daily_sent: 0,
       last_sent_date: new Date().toISOString().split('T')[0],
       free_limit_used: 0,
