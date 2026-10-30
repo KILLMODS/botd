@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TaskItem, AccountItem, UserProfile } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { X, Clock, Users, Image as ImageIcon, Plus } from 'lucide-react';
+import { X } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface CreateTaskModalProps {
@@ -24,7 +24,6 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const [delayMin, setDelayMin] = useState(plan.min_delay);
   const [delayMax, setDelayMax] = useState(plan.min_delay + 15);
   const [isLoop, setIsLoop] = useState(false);
-  const [hasMedia, setHasMedia] = useState(false);
   const [targetAccs, setTargetAccs] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +37,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
     const lines = linksText.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) {
-      setError('Укажите хотя бы одного получателя (каждый с новой строки)');
+      setError('Укажите хотя бы одного получателя (по одному на строке)');
       return;
     }
 
     if (delayMin < plan.min_delay) {
-      setError(`Минимальная задержка для тарифа ${plan.name} составляет ${plan.min_delay} сек.`);
+      setError(`Минимальная задержка для вашего тарифа: ${plan.min_delay} сек.`);
       return;
     }
 
@@ -71,7 +70,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
         delay_min: delayMin,
         delay_max: Math.max(delayMin, delayMax),
         loop: isLoop ? 1 : 0,
-        media: hasMedia ? 'photo_attachment.jpg' : null,
+        media: null,
         chats: parsedChats,
       });
       triggerHaptic('success');
@@ -86,18 +85,15 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-      <div className="bg-neutral-900 border border-white/20 rounded-3xl max-w-md w-full p-5 sm:p-6 relative shadow-2xl my-auto max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-md w-full p-5 relative shadow-xl my-auto max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
-              <Plus className="w-4 h-4 stroke-[3]" />
-            </span>
-            <div>
-              <h3 className="text-base font-bold text-white">Новая задача рассылки</h3>
-              <p className="text-xs text-neutral-400">Настройка параметров</p>
-            </div>
+        <div className="flex items-center justify-between pb-3 border-b border-neutral-900 flex-shrink-0">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Новая задача</h3>
+            <p className="text-[11px] text-neutral-400 font-mono mt-0.5">
+              Параметры кампании
+            </p>
           </div>
 
           <button
@@ -105,99 +101,80 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               triggerHaptic('light');
               onClose();
             }}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-neutral-400 hover:text-white"
+            className="w-7 h-7 rounded-lg bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {error && (
-          <div className="mt-3 p-3 rounded-2xl bg-neutral-800 border border-white/20 text-white text-xs font-mono">
+          <div className="mt-3 p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-red-400 text-xs font-mono">
             {error}
           </div>
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-4 py-3 overflow-y-auto pr-1">
-          {/* Message Text */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-neutral-300">
+        <form onSubmit={handleSubmit} className="space-y-3.5 py-3 overflow-y-auto pr-0.5">
+          {/* Text Area */}
+          <div className="space-y-1">
+            <label className="text-xs text-neutral-400">
               Текст сообщения:
             </label>
             <textarea
+              required
+              rows={3}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              rows={3}
               placeholder="Введите текст рассылки..."
-              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs outline-none resize-none leading-relaxed focus:border-white"
-              required
+              className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs outline-none resize-none leading-relaxed focus:border-neutral-700"
             />
           </div>
 
-          {/* Media Checkbox */}
-          <div
-            onClick={() => {
-              triggerHaptic('selection');
-              setHasMedia(!hasMedia);
-            }}
-            className="bg-black/50 border border-white/10 rounded-2xl p-3 flex items-center justify-between cursor-pointer hover:border-white/20 transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <ImageIcon className="w-4 h-4 text-white" />
-              <div>
-                <div className="text-xs font-semibold text-white">Прикрепить фото</div>
-                <div className="text-[11px] text-neutral-400">Отправка с фотографией</div>
-              </div>
+          {/* Links Area */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <label className="text-neutral-400">
+                Получатели (каждый с новой строки):
+              </label>
+              <span className="text-neutral-500 font-mono text-[11px]">
+                @username или t.me/link
+              </span>
             </div>
-            <input
-              type="checkbox"
-              checked={hasMedia}
-              onChange={() => {}}
-              className="w-4 h-4 rounded text-black accent-white"
-            />
-          </div>
-
-          {/* Recipients / Chats */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-neutral-300">
-              Получатели (по одному на строку):
-            </label>
             <textarea
+              required
+              rows={3}
               value={linksText}
               onChange={(e) => setLinksText(e.target.value)}
-              rows={3}
-              placeholder={'@username\nhttps://t.me/chat\n@group_ad'}
-              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs font-mono outline-none resize-none focus:border-white"
-              required
+              placeholder={`@chat1\nhttps://t.me/chat2\nchat_id`}
+              className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs outline-none font-mono resize-none leading-relaxed focus:border-neutral-700"
             />
           </div>
 
-          {/* Delay Range */}
-          <div className="space-y-1.5">
+          {/* Delays */}
+          <div className="space-y-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-neutral-300 font-semibold flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-white" />
+              <span className="text-neutral-400">
                 Задержка (сек):
               </span>
-              <span className="text-neutral-400 font-mono text-[11px]">
-                {delayMin} – {delayMax}с
+              <span className="text-neutral-500 font-mono text-[11px]">
+                мин. для тарифа: {plan.min_delay}с
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <div className="bg-black/50 border border-white/10 rounded-2xl p-2">
-                <span className="text-[10px] text-neutral-400 block mb-1">Мин:</span>
+              <div className="bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1.5">
+                <span className="text-[10px] text-neutral-500 block">От</span>
                 <input
                   type="number"
                   min={plan.min_delay}
-                  max={300}
+                  max={600}
                   value={delayMin}
                   onChange={(e) => setDelayMin(Number(e.target.value))}
                   className="w-full bg-transparent text-white font-mono text-xs outline-none"
                 />
               </div>
-              <div className="bg-black/50 border border-white/10 rounded-2xl p-2">
-                <span className="text-[10px] text-neutral-400 block mb-1">Макс:</span>
+              <div className="bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1.5">
+                <span className="text-[10px] text-neutral-500 block">До</span>
                 <input
                   type="number"
                   min={delayMin}
@@ -210,55 +187,57 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             </div>
           </div>
 
-          {/* Target Accounts */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-white" />
+          {/* Accounts selection */}
+          <div className="space-y-1">
+            <label className="text-xs text-neutral-400">
               Отправлять с аккаунтов:
             </label>
             <select
               value={targetAccs}
               onChange={(e) => setTargetAccs(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs outline-none focus:border-white"
+              className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs outline-none focus:border-neutral-700"
             >
-              <option value="all" className="bg-neutral-900 text-white">
-                Все активные аккаунты ({accounts.length})
+              <option value="all" className="bg-neutral-950 text-white">
+                Все мои аккаунты ({accounts.length})
               </option>
               {accounts.map((acc) => (
-                <option key={acc.id} value={String(acc.id)} className="bg-neutral-900 text-white">
-                  📱 {acc.phone} (ID: {acc.id})
+                <option key={acc.id} value={String(acc.id)} className="bg-neutral-950 text-white">
+                  {acc.phone} (ID: {acc.id})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Loop Mode */}
-          <div
-            onClick={() => {
-              triggerHaptic('selection');
-              setIsLoop(!isLoop);
-            }}
-            className="bg-black/50 border border-white/10 rounded-2xl p-3 flex items-center justify-between cursor-pointer hover:border-white/20 transition-colors"
-          >
-            <div>
-              <div className="text-xs font-semibold text-white">Бесконечный цикл (Loop)</div>
-              <div className="text-[11px] text-neutral-400">Повторять рассылку по кругу</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={isLoop}
-              onChange={() => {}}
-              className="w-4 h-4 rounded text-black accent-white"
-            />
+          {/* Loop toggle */}
+          <div className="pt-1">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-neutral-300">
+              <input
+                type="checkbox"
+                checked={isLoop}
+                onChange={(e) => setIsLoop(e.target.checked)}
+                className="w-4 h-4 rounded bg-neutral-900 border-neutral-700 accent-white"
+              />
+              <span>Бесконечный автоповтор (Loop)</span>
+            </label>
           </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3.5 px-4 rounded-2xl bg-white text-black font-bold text-sm hover:bg-neutral-200 active:scale-95 transition-all mt-2 shadow-lg"
-          >
-            {isLoading ? 'Создание...' : 'Создать задачу'}
-          </button>
+          {/* Submit */}
+          <div className="pt-3 border-t border-neutral-900 flex items-center justify-end gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2.5 px-4 rounded-xl border border-neutral-800 text-neutral-400 hover:text-white text-xs font-medium transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="py-2.5 px-5 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-xs transition-colors"
+            >
+              {isLoading ? 'Создание...' : 'Создать задачу'}
+            </button>
+          </div>
         </form>
       </div>
     </div>

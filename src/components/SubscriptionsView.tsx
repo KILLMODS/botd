@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile, PlanConfig, PlanTier } from '../types';
 import { SUBSCRIPTION_PLANS, botApi } from '../services/api';
-import { Sparkles, Check, Star, Zap, ExternalLink, RefreshCw } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 import confetti from 'canvas-confetti';
 
@@ -40,47 +40,44 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
           setStatusMessage('Счет создан. Открываем окно оплаты...');
           triggerHaptic('success');
 
-          // If inside Telegram WebApp, open native invoice
           if (window.Telegram?.WebApp?.openInvoice) {
             window.Telegram.WebApp.openInvoice(res.invoice_link, async (status) => {
               if (status === 'paid') {
                 triggerHaptic('success');
                 const updated = await botApi.activateSubscription(user.user_id, planKey, 30);
                 onUpdateUser(updated);
-                confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
-                alert(`🎉 Оплата принята! Подписка ${plan.name} активирована на 30 дней.`);
+                confetti({ particleCount: 80, spread: 60, origin: { y: 0.5 } });
+                alert(`Оплата принята! Подписка ${plan.name} активирована на 30 дней.`);
               } else if (status === 'cancelled') {
-                setStatusMessage('Оплата Stars отменена');
+                setStatusMessage('Оплата отменена');
               } else {
-                setStatusMessage(`Статус оплаты: ${status}`);
+                setStatusMessage(`Статус: ${status}`);
               }
             });
           } else {
-            // Outside Telegram WebApp
             window.open(res.invoice_link, '_blank');
-            setStatusMessage(`Инвойс Telegram Stars открыт в новом окне.`);
+            setStatusMessage(`Инвойс Telegram Stars открыт.`);
           }
         } else {
-          // Fallback simulation if direct bot API token was blocked by CORS
-          alert(`Создан инвойс Telegram Stars на ${plan.price_stars} ⭐. Подтверждаем оплату...`);
+          // Fallback direct activation
           const updated = await botApi.activateSubscription(user.user_id, planKey, 30);
           onUpdateUser(updated);
-          confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+          confetti({ particleCount: 80, spread: 60, origin: { y: 0.5 } });
         }
       } else {
         // CryptoBot
-        setStatusMessage('Создание счета в CryptoBot API...');
+        setStatusMessage('Создание счета в CryptoBot...');
         const res = await botApi.createCryptoInvoice(user.user_id, planKey);
         if (res.ok && res.invoice_url) {
           setCryptoInvoice({ url: res.invoice_url, id: res.invoice_id || 0 });
           triggerHaptic('success');
-          setStatusMessage('Счет в USDT сформирован. Нажмите кнопку ниже для перехода в @CryptoBot:');
+          setStatusMessage('Счет USDT сформирован.');
 
           if (window.Telegram?.WebApp?.openTelegramLink) {
             window.Telegram.WebApp.openTelegramLink(res.invoice_url);
           }
         } else {
-          alert('Ошибка создания счета CryptoBot: ' + (res.error || 'попробуйте позже'));
+          alert('Ошибка создания счета: ' + (res.error || 'попробуйте позже'));
         }
       }
     } catch (err: unknown) {
@@ -95,7 +92,7 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
     if (!cryptoInvoice) return;
     triggerHaptic('medium');
     setIsProcessing(true);
-    setStatusMessage('Проверка статуса транзакции в блокчейне CryptoBot...');
+    setStatusMessage('Проверка оплаты в сети CryptoBot...');
 
     try {
       const isPaid = await botApi.checkCryptoInvoice(cryptoInvoice.id);
@@ -105,11 +102,11 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
         onUpdateUser(updated);
         setCryptoInvoice(null);
         setStatusMessage(null);
-        confetti({ particleCount: 140, spread: 90, origin: { y: 0.5 } });
-        alert(`🎉 Оплата получена! Подписка ${SUBSCRIPTION_PLANS[selectedPlan].name} успешно активирована.`);
+        confetti({ particleCount: 80, spread: 60, origin: { y: 0.5 } });
+        alert(`Оплата получена! Подписка активирована.`);
       } else {
         triggerHaptic('warning');
-        alert('Платеж пока не подтвержден в сети CryptoBot. Если вы уже перевели USDT, подождите 1-2 минуты и нажмите кнопку снова.');
+        alert('Платеж пока не подтвержден в CryptoBot. Подождите минуту и проверьте снова.');
       }
     } finally {
       setIsProcessing(false);
@@ -117,96 +114,69 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-28 animate-in fade-in duration-200">
-      {/* Top Banner */}
-      <div className="bg-neutral-900/70 border border-white/15 rounded-3xl p-5 text-center space-y-2 backdrop-blur-2xl">
-        <div className="w-12 h-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white mx-auto">
-          <Sparkles className="w-6 h-6" />
-        </div>
-        <h2 className="text-lg font-bold text-white">Тарифные планы</h2>
-        <p className="text-xs text-neutral-400 max-w-xs mx-auto">
-          Официальная оплата через Telegram Stars (Звёзды) и @CryptoBot (USDT).
-        </p>
-
-        <div className="pt-2 flex items-center justify-center gap-2">
-          <span className="text-xs text-neutral-400">Ваш тариф:</span>
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white text-black">
-            {activePlan.name}
-          </span>
+    <div className="space-y-4 pb-28">
+      {/* Header */}
+      <div className="flex items-center justify-between px-1 pt-1">
+        <div>
+          <h2 className="text-base font-semibold text-white">Подписка</h2>
+          <p className="text-xs text-neutral-400">
+            Текущий тариф: <span className="text-white font-medium">{activePlan.name}</span>
+          </p>
         </div>
       </div>
 
       {/* Payment Method Switcher */}
-      <div className="bg-neutral-900/80 border border-white/15 rounded-full p-1.5 flex items-center gap-1 max-w-xs mx-auto">
+      <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-1 flex items-center">
         <button
           onClick={() => {
             triggerHaptic('selection');
             setPaymentMethod('stars');
           }}
-          className={`flex-1 py-1.5 px-3 rounded-full text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             paymentMethod === 'stars'
-              ? 'bg-white text-black shadow-sm'
+              ? 'bg-neutral-800 text-white'
               : 'text-neutral-400 hover:text-white'
           }`}
         >
-          <Star className="w-3.5 h-3.5 fill-current" />
-          <span>Telegram Stars</span>
+          Telegram Stars
         </button>
-
         <button
           onClick={() => {
             triggerHaptic('selection');
             setPaymentMethod('crypto');
           }}
-          className={`flex-1 py-1.5 px-3 rounded-full text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             paymentMethod === 'crypto'
-              ? 'bg-white text-black shadow-sm'
+              ? 'bg-neutral-800 text-white'
               : 'text-neutral-400 hover:text-white'
           }`}
         >
-          <Zap className="w-3.5 h-3.5" />
-          <span>CryptoBot (USDT)</span>
+          CryptoBot (USDT)
         </button>
       </div>
 
-      {/* Status Message */}
       {statusMessage && (
-        <div className="p-3 rounded-2xl bg-neutral-900 border border-white/20 text-white text-xs text-center font-mono animate-in fade-in">
+        <div className="p-3 bg-neutral-900 border border-neutral-800 rounded-xl text-xs text-neutral-300 font-mono">
           {statusMessage}
         </div>
       )}
 
-      {/* Crypto Invoice Card */}
       {cryptoInvoice && (
-        <div className="bg-neutral-900 border border-white/25 rounded-3xl p-4 space-y-3 animate-in zoom-in-95">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-white flex items-center gap-1.5">
-              <Zap className="w-4 h-4" />
-              Счет CryptoBot #{cryptoInvoice.id}
-            </span>
-            <span className="text-neutral-400 font-mono">Ожидание оплаты</span>
-          </div>
-
-          <p className="text-xs text-neutral-300">
-            Перейдите в Telegram-бота @CryptoBot для оплаты в USDT:
-          </p>
-
+        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2.5">
+          <div className="text-xs font-semibold text-white">Счет #{cryptoInvoice.id} создан</div>
           <div className="flex gap-2">
             <a
               href={cryptoInvoice.url}
               target="_blank"
               rel="noreferrer"
-              onClick={() => triggerHaptic('light')}
-              className="flex-1 py-2.5 px-3 rounded-2xl bg-white text-black font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-neutral-200 active:scale-95 transition-all"
+              className="flex-1 py-2 px-3 rounded-lg bg-white text-black text-xs font-medium text-center"
             >
-              <span>Оплатить в @CryptoBot</span>
-              <ExternalLink className="w-3.5 h-3.5" />
+              Оплатить в CryptoBot
             </a>
-
             <button
               onClick={handleVerifyCryptoPayment}
               disabled={isProcessing}
-              className="py-2.5 px-4 rounded-2xl bg-neutral-800 border border-white/20 text-white font-bold text-xs hover:bg-neutral-700 active:scale-95 transition-all"
+              className="py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium"
             >
               Проверить
             </button>
@@ -214,109 +184,74 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
         </div>
       )}
 
-      {/* Plans List */}
-      <div className="space-y-3.5">
+      {/* Plan Cards */}
+      <div className="space-y-3">
         {plans.map((p) => {
           const isCurrent = user.sub_plan === p.id;
           const isSelected = selectedPlan === p.id;
+          const isPaidPlan = p.id !== 'free';
 
           return (
             <div
               key={p.id}
               onClick={() => {
-                triggerHaptic('selection');
-                setSelectedPlan(p.id);
+                if (isPaidPlan) {
+                  triggerHaptic('selection');
+                  setSelectedPlan(p.id as PlanTier);
+                }
               }}
-              className={`bg-neutral-900/70 border rounded-3xl p-5 relative cursor-pointer transition-all duration-200 space-y-4 backdrop-blur-2xl ${
-                isSelected
-                  ? 'border-white shadow-[0_0_25px_rgba(255,255,255,0.15)] ring-1 ring-white/40'
-                  : 'border-white/15 hover:border-white/30'
+              className={`bg-neutral-900/60 border rounded-2xl p-4 transition-colors space-y-3 ${
+                isSelected && isPaidPlan
+                  ? 'border-neutral-500'
+                  : 'border-neutral-800'
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-base text-white">{p.name}</span>
-                  {p.popular && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-black">
-                      Популярный
-                    </span>
-                  )}
-                  {isCurrent && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-800 text-neutral-300 border border-white/20">
-                      Текущий
-                    </span>
-                  )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-sm text-white">{p.name}</h3>
+                    {isCurrent && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-neutral-300">
+                        Текущий
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    {p.id === 'free'
+                      ? 'Бесплатный базовый тариф'
+                      : paymentMethod === 'stars'
+                      ? `${p.price_stars} Stars / мес`
+                      : `$${p.price_usd} USDT / мес`}
+                  </div>
                 </div>
 
-                <div className="text-right">
-                  {p.id === 'free' ? (
-                    <span className="text-sm font-bold text-white">0 ₽</span>
-                  ) : paymentMethod === 'stars' ? (
-                    <div className="flex items-center gap-1 font-bold text-white text-sm">
-                      <Star className="w-4 h-4 fill-current text-white" />
-                      <span>{p.price_stars} ⭐</span>
-                    </div>
-                  ) : (
-                    <div className="font-bold text-white text-sm">
-                      ${p.price_usd} <span className="text-[10px] text-neutral-400">USDT</span>
-                    </div>
-                  )}
-                  <span className="text-[10px] text-neutral-500 block">/ 30 дней</span>
-                </div>
+                {isPaidPlan && (
+                  <button
+                    disabled={isProcessing || isCurrent}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleBuy(p.id as PlanTier);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      isCurrent
+                        ? 'bg-neutral-800 text-neutral-500 cursor-default'
+                        : 'bg-white hover:bg-neutral-200 text-black'
+                    }`}
+                  >
+                    {isCurrent ? 'Активен' : 'Оформить'}
+                  </button>
+                )}
               </div>
 
-              {/* Specs */}
-              <div className="bg-black/50 border border-white/10 rounded-2xl p-3 grid grid-cols-3 gap-2 text-center font-mono">
-                <div>
-                  <div className="text-xs font-bold text-white">{p.max_accounts}</div>
-                  <div className="text-[10px] text-neutral-400">Аккаунтов</div>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">{p.daily_limit.toLocaleString()}</div>
-                  <div className="text-[10px] text-neutral-400">В день</div>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">{p.min_delay}с</div>
-                  <div className="text-[10px] text-neutral-400">Задержка</div>
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="space-y-1.5 pt-1">
-                {p.features.map((f, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-xs text-neutral-300">
-                    <Check className="w-3.5 h-3.5 text-white flex-shrink-0" />
-                    <span>{f}</span>
+              {/* Features List */}
+              <div className="space-y-1.5 pt-1 border-t border-neutral-800/60">
+                {p.features.map((feat, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs text-neutral-400">
+                    <Check className="w-3.5 h-3.5 text-neutral-300 flex-shrink-0" />
+                    <span>{feat}</span>
                   </div>
                 ))}
               </div>
-
-              {/* Buy Button */}
-              {p.id !== 'free' && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleBuy(p.id);
-                  }}
-                  disabled={isProcessing}
-                  className={`w-full py-3 px-4 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all ${
-                    isCurrent
-                      ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                      : 'bg-white text-black hover:bg-neutral-200'
-                  }`}
-                >
-                  {isProcessing && selectedPlan === p.id ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Связь с платежным шлюзом...</span>
-                    </>
-                  ) : (
-                    <span>
-                      Оплатить {paymentMethod === 'stars' ? `${p.price_stars} Stars` : `$${p.price_usd} USDT`}
-                    </span>
-                  )}
-                </button>
-              )}
             </div>
           );
         })}

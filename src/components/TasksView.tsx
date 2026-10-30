@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TaskItem, AccountItem, UserProfile } from '../types';
-import { Plus, ListTodo, Play, Square, RotateCw, Image as ImageIcon, ChevronRight } from 'lucide-react';
+import { Plus, Play, Square, Layers, RotateCw } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface TasksViewProps {
@@ -41,26 +41,25 @@ export const TasksView: React.FC<TasksViewProps> = ({
     switch (status) {
       case 'running':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white text-black inline-flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping inline-block" />
-            Выполняется
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-emerald-400">
+            В процессе
           </span>
         );
       case 'done':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-200 text-black">
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-neutral-300">
             Завершена
           </span>
         );
       case 'limit_reached':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-800 text-neutral-300 border border-white/10">
-            Лимит тарифа
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-amber-400">
+            Лимит
           </span>
         );
       default:
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-800 text-neutral-400">
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-neutral-400">
             Остановлена
           </span>
         );
@@ -68,19 +67,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-28 animate-in fade-in duration-200">
-      {/* Top Banner */}
-      <div className="bg-neutral-900/70 border border-white/15 rounded-3xl p-4 flex items-center justify-between backdrop-blur-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
-            <ListTodo className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-white">Задачи рассылки</h2>
-            <p className="text-xs text-neutral-400">
-              Всего: <span className="font-mono text-white font-bold">{tasks.length}</span> кампаний
-            </p>
-          </div>
+    <div className="space-y-4 pb-28">
+      {/* Top Header */}
+      <div className="flex items-center justify-between px-1 pt-1">
+        <div>
+          <h2 className="text-base font-semibold text-white">Задачи</h2>
+          <p className="text-xs text-neutral-400">
+            {tasks.length} кампаний
+          </p>
         </div>
 
         <button
@@ -88,38 +82,28 @@ export const TasksView: React.FC<TasksViewProps> = ({
             triggerHaptic('medium');
             onOpenCreateModal();
           }}
-          className="px-3.5 py-2 rounded-2xl bg-white text-black font-bold text-xs flex items-center gap-1.5 hover:bg-neutral-200 active:scale-95 transition-all"
+          className="px-3.5 py-1.5 rounded-xl bg-white text-black font-medium text-xs flex items-center gap-1.5 hover:bg-neutral-200 transition-colors"
         >
-          <Plus className="w-4 h-4 stroke-[3]" />
+          <Plus className="w-3.5 h-3.5" />
           <span>Создать</span>
         </button>
       </div>
 
       {/* Tasks List */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-            Активные задачи
-          </h3>
-        </div>
-
+      <div className="space-y-2">
         {tasks.length === 0 ? (
-          <div className="bg-neutral-900/60 border border-white/10 rounded-3xl p-8 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 mx-auto">
-              <ListTodo className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-white">Задач пока нет</h4>
-              <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1">
-                Создайте задачу с текстом рассылки, ссылками на группы и задержками.
-              </p>
-            </div>
+          <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-8 text-center space-y-3">
+            <Layers className="w-8 h-8 text-neutral-600 mx-auto" />
+            <h4 className="text-sm font-medium text-white">Задач пока нет</h4>
+            <p className="text-xs text-neutral-400 max-w-xs mx-auto">
+              Создайте задачу с текстом рассылки, списком получателей и интервалом отправки.
+            </p>
             <button
               onClick={() => {
                 triggerHaptic('medium');
                 onOpenCreateModal();
               }}
-              className="mt-2 px-4 py-2 rounded-2xl bg-white text-black text-xs font-bold hover:bg-neutral-200"
+              className="mt-1 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-colors"
             >
               + Создать задачу
             </button>
@@ -136,36 +120,30 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   triggerHaptic('light');
                   onSelectTask(task);
                 }}
-                className="bg-neutral-900/70 border border-white/15 rounded-3xl p-4.5 cursor-pointer hover:border-white/30 active:scale-[0.99] transition-all space-y-3 backdrop-blur-2xl group"
+                className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 cursor-pointer hover:border-neutral-700 transition-colors space-y-2.5"
               >
                 {/* Header row */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-sm text-white font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold text-white">
                       #{task.id}
                     </span>
                     {getStatusBadge(task.status)}
                     {task.loop === 1 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-800 text-neutral-300 border border-white/10 inline-flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-neutral-800 text-neutral-400 flex items-center gap-1">
                         <RotateCw className="w-2.5 h-2.5" />
-                        Loop
-                      </span>
-                    )}
-                    {task.media && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-800 text-neutral-300 border border-white/10 inline-flex items-center gap-1">
-                        <ImageIcon className="w-2.5 h-2.5" />
-                        Медиа
+                        цикл
                       </span>
                     )}
                   </div>
 
                   <button
-                    onClick={(e) => handleToggleRun(e, task)}
                     disabled={isToggling}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    onClick={(e) => handleToggleRun(e, task)}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
                       isRunning
-                        ? 'bg-neutral-800 text-white border border-white/20 hover:bg-neutral-700'
-                        : 'bg-white text-black hover:bg-neutral-200'
+                        ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300'
+                        : 'bg-white hover:bg-neutral-200 text-black'
                     }`}
                   >
                     {isRunning ? (
@@ -176,32 +154,24 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     ) : (
                       <>
                         <Play className="w-3 h-3 fill-current" />
-                        <span>Старт</span>
+                        <span>Запуск</span>
                       </>
                     )}
                   </button>
                 </div>
 
-                {/* Excerpt */}
-                <p className="text-xs text-neutral-300 line-clamp-2 leading-relaxed bg-black/40 p-2.5 rounded-2xl border border-white/5">
-                  {task.text || 'Текст рассылки'}
+                {/* Message preview */}
+                <p className="text-xs text-neutral-300 line-clamp-2 leading-relaxed">
+                  {task.text || 'Без текста'}
                 </p>
 
-                {/* Stats row */}
-                <div className="flex items-center justify-between text-xs text-neutral-400 pt-1 border-t border-white/10">
-                  <div className="flex items-center gap-3 font-mono text-[11px]">
-                    <span className="text-white font-bold">✅ {task.sent}</span>
-                    <span className="text-neutral-400">❌ {task.errors}</span>
-                    <span>•</span>
-                    <span>⏱ {task.delay_min}–{task.delay_max}с</span>
-                    <span>•</span>
-                    <span>👥 {task.chats?.length || 0}</span>
+                {/* Footer details */}
+                <div className="flex items-center justify-between text-[11px] text-neutral-500 font-mono pt-1 border-t border-neutral-800/60">
+                  <div className="flex items-center gap-3">
+                    <span>Отправлено: {task.sent}</span>
+                    {task.errors > 0 && <span className="text-red-400">Ошибок: {task.errors}</span>}
                   </div>
-
-                  <div className="flex items-center text-white text-xs font-semibold group-hover:translate-x-0.5 transition-transform">
-                    <span>Открыть</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </div>
+                  <span>Интервал: {task.delay_min}–{task.delay_max}с</span>
                 </div>
               </div>
             );

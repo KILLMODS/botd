@@ -146,9 +146,9 @@ export default function App() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white">
-        <div className="bg-neutral-900 border border-white/20 rounded-3xl p-8 text-center space-y-3 max-w-xs w-full">
-          <div className="w-10 h-10 rounded-full border-2 border-white border-t-transparent animate-spin mx-auto" />
-          <div className="text-sm font-bold text-white">Синхронизация с ботом...</div>
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 text-center space-y-3 max-w-xs w-full">
+          <div className="w-6 h-6 rounded-full border-2 border-white border-t-transparent animate-spin mx-auto" />
+          <div className="text-xs text-neutral-400 font-mono">Синхронизация...</div>
         </div>
       </div>
     );
@@ -165,10 +165,10 @@ export default function App() {
       {pullDistance > 0 && (
         <div
           style={{ height: `${pullDistance}px` }}
-          className="overflow-hidden flex items-center justify-center bg-neutral-950 transition-all duration-100 border-b border-white/10"
+          className="overflow-hidden flex items-center justify-center bg-black transition-all duration-100 border-b border-neutral-900"
         >
-          <div className={`w-5 h-5 rounded-full border-2 border-white border-t-transparent ${pullDistance >= 45 ? 'animate-spin' : ''}`} />
-          <span className="text-[11px] font-mono text-neutral-400 ml-2">
+          <div className={`w-4 h-4 rounded-full border-2 border-neutral-400 border-t-transparent ${pullDistance >= 45 ? 'animate-spin' : ''}`} />
+          <span className="text-[11px] font-mono text-neutral-500 ml-2">
             {pullDistance >= 45 ? 'Отпустите для обновления' : 'Потяните для обновления'}
           </span>
         </div>

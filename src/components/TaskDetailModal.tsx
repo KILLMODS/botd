@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TaskItem, AccountItem, UserProfile } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { X, Play, Square, RotateCw, Trash2, Save, Send, Image as ImageIcon, Users, Clock } from 'lucide-react';
+import { X, Play, Square, Trash2 } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface TaskDetailModalProps {
@@ -84,18 +84,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-      <div className="bg-neutral-900 border border-white/20 rounded-3xl max-w-md w-full p-5 sm:p-6 relative shadow-2xl my-auto max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-md w-full p-5 relative shadow-xl my-auto max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
-              <Send className="w-4 h-4" />
-            </span>
-            <div>
-              <h3 className="text-base font-bold text-white">Задача #{task.id}</h3>
-              <p className="text-xs text-neutral-400">Параметры кампании</p>
-            </div>
+        <div className="flex items-center justify-between pb-3 border-b border-neutral-900 flex-shrink-0">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Задача #{task.id}</h3>
+            <p className="text-[11px] text-neutral-400 font-mono mt-0.5">
+              Создана для рассылки
+            </p>
           </div>
 
           <button
@@ -103,33 +100,33 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               triggerHaptic('light');
               onClose();
             }}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-neutral-400 hover:text-white"
+            className="w-7 h-7 rounded-lg bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="space-y-4 py-4 overflow-y-auto pr-1">
+        <div className="space-y-3.5 py-3 overflow-y-auto pr-0.5">
           {/* Main Action Bar */}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleToggleRun}
               disabled={isTogglingRun}
-              className={`py-3 px-4 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${
+              className={`py-2.5 px-3 rounded-xl font-medium text-xs flex items-center justify-center gap-1.5 transition-colors ${
                 isRunning
-                  ? 'bg-neutral-800 text-white border border-white/20 hover:bg-neutral-700'
-                  : 'bg-white text-black hover:bg-neutral-200 shadow-md'
+                  ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                  : 'bg-white text-black hover:bg-neutral-200'
               }`}
             >
               {isRunning ? (
                 <>
-                  <Square className="w-4 h-4 fill-current" />
+                  <Square className="w-3 h-3 fill-current" />
                   <span>Остановить</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-4 h-4 fill-current" />
+                  <Play className="w-3 h-3 fill-current" />
                   <span>Запустить</span>
                 </>
               )}
@@ -140,36 +137,35 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 triggerHaptic('selection');
                 setIsLoop(!isLoop);
               }}
-              className={`py-3 px-4 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 ${
+              className={`py-2.5 px-3 rounded-xl font-medium text-xs flex items-center justify-center gap-1.5 border transition-colors ${
                 isLoop
-                  ? 'bg-white text-black border-white'
-                  : 'bg-neutral-900 text-neutral-300 border-white/15 hover:border-white/30'
+                  ? 'bg-neutral-800 text-white border-neutral-700'
+                  : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700'
               }`}
             >
-              <RotateCw className="w-3.5 h-3.5" />
-              <span>{isLoop ? '🔁 Бесконечно' : '1️⃣ Одиночный'}</span>
+              <span>{isLoop ? 'Режим: Цикл' : 'Режим: Одиночный'}</span>
             </button>
           </div>
 
           {/* Stats Bar */}
-          <div className="bg-black/50 border border-white/10 rounded-2xl p-3 grid grid-cols-3 gap-2 text-center font-mono">
+          <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-2.5 grid grid-cols-3 gap-2 text-center font-mono">
             <div>
-              <div className="text-white font-bold text-sm">✅ {task.sent}</div>
-              <div className="text-[10px] text-neutral-400 uppercase">Отправлено</div>
+              <div className="text-white text-xs">{task.sent}</div>
+              <div className="text-[10px] text-neutral-500">Отправлено</div>
             </div>
             <div>
-              <div className="text-neutral-400 font-bold text-sm">❌ {task.errors}</div>
-              <div className="text-[10px] text-neutral-400 uppercase">Ошибок</div>
+              <div className="text-neutral-300 text-xs">{task.errors}</div>
+              <div className="text-[10px] text-neutral-500">Ошибок</div>
             </div>
             <div>
-              <div className="text-white font-bold text-sm">👥 {task.chats?.length || 0}</div>
-              <div className="text-[10px] text-neutral-400 uppercase">Чатов</div>
+              <div className="text-white text-xs">{task.chats?.length || 0}</div>
+              <div className="text-[10px] text-neutral-500">Получателей</div>
             </div>
           </div>
 
           {/* Text input */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-neutral-300">
+          <div className="space-y-1">
+            <label className="text-xs text-neutral-400">
               Текст сообщения:
             </label>
             <textarea
@@ -177,76 +173,63 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               onChange={(e) => setText(e.target.value)}
               rows={4}
               placeholder="Текст рассылки..."
-              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs outline-none resize-none leading-relaxed focus:border-white"
+              className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs outline-none resize-none leading-relaxed focus:border-neutral-700"
             />
           </div>
 
-          {/* Media info */}
-          <div className="bg-black/40 border border-white/10 rounded-2xl p-3 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <ImageIcon className="w-4 h-4 text-white" />
-              <span className="text-white font-medium">Медиа:</span>
-            </div>
-            <span className="text-neutral-400 font-mono text-[11px]">
-              {task.media ? '📷 Прикреплено' : '❌ Без медиа'}
-            </span>
-          </div>
-
           {/* Delay Range */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-neutral-300 font-semibold flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-white" />
-                Интервал задержки:
+              <span className="text-neutral-400">
+                Задержка (сек):
               </span>
-              <span className="text-neutral-400 font-mono">
-                {delayMin} – {delayMax} сек
+              <span className="text-neutral-500 font-mono text-[11px]">
+                мин. для тарифа: {plan.min_delay}с
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <div className="bg-black/50 border border-white/10 rounded-2xl p-2">
-                <span className="text-[10px] text-neutral-400 block mb-1">Мин:</span>
+              <div className="bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1.5">
+                <span className="text-[10px] text-neutral-500 block">От</span>
                 <input
                   type="number"
                   min={plan.min_delay}
                   max={600}
                   value={delayMin}
                   onChange={(e) => setDelayMin(Number(e.target.value))}
-                  className="w-full bg-transparent text-white font-mono text-sm outline-none"
+                  className="w-full bg-transparent text-white font-mono text-xs outline-none"
                 />
               </div>
-              <div className="bg-black/50 border border-white/10 rounded-2xl p-2">
-                <span className="text-[10px] text-neutral-400 block mb-1">Макс:</span>
+              <div className="bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1.5">
+                <span className="text-[10px] text-neutral-500 block">До</span>
                 <input
                   type="number"
                   min={delayMin}
                   max={600}
                   value={delayMax}
                   onChange={(e) => setDelayMax(Number(e.target.value))}
-                  className="w-full bg-transparent text-white font-mono text-sm outline-none"
+                  className="w-full bg-transparent text-white font-mono text-xs outline-none"
                 />
               </div>
             </div>
           </div>
 
           {/* Target Accounts Selection */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-white" />
+          <div className="space-y-1">
+            <label className="text-xs text-neutral-400">
               Отправлять с аккаунтов:
             </label>
             <select
               value={targetAccs}
               onChange={(e) => setTargetAccs(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs outline-none focus:border-white"
+              className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs outline-none focus:border-neutral-700"
             >
-              <option value="all" className="bg-neutral-900 text-white">
-                Все активные аккаунты ({accounts.length})
+              <option value="all" className="bg-neutral-950 text-white">
+                Все мои аккаунты ({accounts.length})
               </option>
               {accounts.map((acc) => (
-                <option key={acc.id} value={String(acc.id)} className="bg-neutral-900 text-white">
-                  📱 {acc.phone} (ID: {acc.id})
+                <option key={acc.id} value={String(acc.id)} className="bg-neutral-950 text-white">
+                  {acc.phone} (ID: {acc.id})
                 </option>
               ))}
             </select>
@@ -254,11 +237,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-3 flex-shrink-0">
+        <div className="pt-3 border-t border-neutral-900 flex items-center justify-between gap-2 flex-shrink-0">
           <button
             onClick={handleDelete}
             disabled={isDeleting}
-            className="w-10 h-10 rounded-2xl bg-neutral-800 hover:bg-neutral-700 border border-white/15 text-neutral-300 flex items-center justify-center active:scale-95 transition-all flex-shrink-0"
+            className="p-2.5 rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-red-400 transition-colors"
             title="Удалить задачу"
           >
             <Trash2 className="w-4 h-4" />
@@ -267,10 +250,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex-1 py-3 px-4 rounded-2xl bg-white text-black font-bold text-xs flex items-center justify-center gap-2 hover:bg-neutral-200 active:scale-95 transition-all shadow-md"
+            className="flex-1 py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-xs transition-colors"
           >
-            <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Сохранение...' : 'Сохранить изменения'}</span>
+            {isSaving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
       </div>

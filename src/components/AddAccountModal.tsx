@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Smartphone, KeyRound, Lock, ArrowRight, RefreshCw, CheckCircle2, AlertTriangle, FileCode } from 'lucide-react';
+import { X, Smartphone, FileCode, Check } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 import { botApi } from '../services/api';
 import { AccountItem } from '../types';
@@ -160,95 +160,84 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-neutral-900 border border-white/20 rounded-3xl max-w-sm w-full p-6 relative shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-sm w-full p-5 relative shadow-xl">
         <button
           onClick={() => {
             triggerHaptic('light');
             onClose();
           }}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-neutral-400 hover:text-white"
+          className="absolute top-4 right-4 w-7 h-7 rounded-lg bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3.5 h-3.5" />
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
-            {step === 'session' ? <FileCode className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white">
+            {step === 'session' ? <FileCode className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
           </div>
           <div>
-            <h3 className="text-base font-bold text-white">
+            <h3 className="text-sm font-semibold text-white">
               {step === 'phone' && 'Номер телефона'}
               {step === 'code' && 'Код подтверждения'}
               {step === '2fa' && 'Пароль 2FA'}
-              {step === 'session' && 'Импорт StringSession'}
-              {step === 'success' && 'Аккаунт добавлен!'}
+              {step === 'session' && 'Импорт session'}
+              {step === 'success' && 'Аккаунт добавлен'}
             </h3>
-            <p className="text-xs text-neutral-400">
+            <p className="text-[11px] text-neutral-400 font-mono">
               {step === 'phone' && 'Авторизация в Telegram'}
-              {step === 'code' && `Отправлен на номер ${phone}`}
-              {step === '2fa' && 'Облачный пароль аккаунта'}
-              {step === 'session' && 'Прямой импорт сессии Telethon'}
-              {step === 'success' && 'Готов к рассылкам'}
+              {step === 'code' && `Отправлен на ${phone}`}
+              {step === '2fa' && 'Двухэтапная аутентификация'}
+              {step === 'session' && 'Telethon StringSession'}
+              {step === 'success' && 'Синхронизирован с ботом'}
             </p>
           </div>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-3 rounded-2xl bg-neutral-800 border border-white/20 text-white text-xs flex items-center gap-2 font-mono">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
+          <div className="mb-3 p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-red-400 text-xs font-mono">
+            {error}
           </div>
         )}
 
         {/* STEP 1: PHONE */}
         {step === 'phone' && (
-          <form onSubmit={handleSendCode} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-neutral-300">
-                Номер телефона с кодом страны:
+          <form onSubmit={handleSendCode} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="text-xs text-neutral-400">
+                Номер телефона:
               </label>
               <input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+7 999 123-45-67"
-                className="w-full px-4 py-3 rounded-2xl bg-black border border-white/15 text-white text-sm outline-none font-mono focus:border-white"
+                className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs outline-none font-mono focus:border-neutral-700"
                 autoFocus
                 required
               />
-              <p className="text-[11px] text-neutral-400">
-                Код авторизации придёт в официальный диалог Telegram.
+              <p className="text-[11px] text-neutral-500">
+                Код придет в диалог Telegram.
               </p>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-2xl bg-white text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-neutral-200 active:scale-95 transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-xs transition-colors"
             >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Отправка кода...</span>
-                </>
-              ) : (
-                <>
-                  <span>Получить код</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              {isLoading ? 'Отправка...' : 'Получить код'}
             </button>
 
             <div className="text-center pt-1">
               <button
                 type="button"
                 onClick={() => setStep('session')}
-                className="text-xs text-neutral-400 hover:text-white underline underline-offset-4"
+                className="text-xs text-neutral-400 hover:text-white"
               >
-                Есть StringSession? Войти по сессии
+                Войти по готовой StringSession
               </button>
             </div>
           </form>
@@ -256,9 +245,9 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
 
         {/* STEP 2: CODE */}
         {step === 'code' && (
-          <form onSubmit={handleConfirmCode} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-neutral-300">
+          <form onSubmit={handleConfirmCode} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="text-xs text-neutral-400">
                 Код из Telegram:
               </label>
               <input
@@ -266,7 +255,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="12345"
-                className="w-full px-4 py-3 rounded-2xl bg-black border border-white/15 text-white text-center text-lg tracking-widest font-mono outline-none focus:border-white"
+                className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-center text-base tracking-widest font-mono outline-none focus:border-neutral-700"
                 autoFocus
                 maxLength={8}
                 required
@@ -276,38 +265,18 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-2xl bg-white text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-neutral-200 active:scale-95 transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-xs transition-colors"
             >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Проверка...</span>
-                </>
-              ) : (
-                <>
-                  <KeyRound className="w-4 h-4" />
-                  <span>Подтвердить вход</span>
-                </>
-              )}
+              {isLoading ? 'Проверка...' : 'Подтвердить код'}
             </button>
 
-            <div className="flex items-center justify-between pt-1 text-xs text-neutral-400">
+            <div className="text-center pt-1">
               <button
                 type="button"
                 onClick={() => setStep('phone')}
-                className="hover:text-white"
+                className="text-xs text-neutral-400 hover:text-white"
               >
-                Назад
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic('light');
-                  alert('Запрос на повторную отправку SMS отправлен');
-                }}
-                className="text-neutral-300 hover:text-white"
-              >
-                Отправить по SMS
+                ← Изменить номер
               </button>
             </div>
           </form>
@@ -315,17 +284,17 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
 
         {/* STEP 3: 2FA */}
         {step === '2fa' && (
-          <form onSubmit={handleConfirm2FA} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-neutral-300">
-                Облачный пароль 2FA:
+          <form onSubmit={handleConfirm2FA} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="text-xs text-neutral-400">
+                Пароль 2FA:
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Ваш пароль 2FA"
-                className="w-full px-4 py-3 rounded-2xl bg-black border border-white/15 text-white text-sm outline-none focus:border-white"
+                placeholder="Ваш облачный пароль"
+                className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs outline-none focus:border-neutral-700"
                 autoFocus
                 required
               />
@@ -334,36 +303,26 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-2xl bg-white text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-neutral-200 active:scale-95 transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-xs transition-colors"
             >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Проверка пароля...</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-4 h-4" />
-                  <span>Войти в аккаунт</span>
-                </>
-              )}
+              {isLoading ? 'Проверка...' : 'Войти'}
             </button>
           </form>
         )}
 
         {/* SESSION IMPORT */}
         {step === 'session' && (
-          <form onSubmit={handleAddSession} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-neutral-300">
-                StringSession (Telethon):
+          <form onSubmit={handleAddSession} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="text-xs text-neutral-400">
+                StringSession:
               </label>
               <textarea
                 value={sessionString}
                 onChange={(e) => setSessionString(e.target.value)}
                 placeholder="1BJWap1wBu8v..."
                 rows={4}
-                className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs font-mono outline-none resize-none focus:border-white"
+                className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-white text-xs font-mono outline-none resize-none focus:border-neutral-700"
                 required
               />
             </div>
@@ -371,19 +330,9 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-2xl bg-white text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-neutral-200 active:scale-95 transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-xs transition-colors"
             >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Импорт...</span>
-                </>
-              ) : (
-                <>
-                  <FileCode className="w-4 h-4" />
-                  <span>Импортировать сессию</span>
-                </>
-              )}
+              {isLoading ? 'Импорт...' : 'Импортировать'}
             </button>
 
             <div className="text-center pt-1">
@@ -400,14 +349,14 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
 
         {/* SUCCESS */}
         {step === 'success' && createdAccount && (
-          <div className="text-center space-y-4 py-2">
-            <div className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="text-center space-y-3 py-2">
+            <div className="w-10 h-10 rounded-full bg-neutral-800 text-emerald-400 flex items-center justify-center mx-auto">
+              <Check className="w-5 h-5" />
             </div>
 
             <div>
-              <h4 className="text-base font-bold text-white">Аккаунт подключен!</h4>
-              <p className="text-sm font-mono text-white font-semibold mt-1">
+              <h4 className="text-sm font-semibold text-white">Аккаунт подключен</h4>
+              <p className="text-xs font-mono text-neutral-400 mt-0.5">
                 {createdAccount.phone}
               </p>
             </div>
@@ -417,7 +366,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                 triggerHaptic('light');
                 onClose();
               }}
-              className="w-full py-3 px-4 rounded-2xl bg-white text-black font-bold text-sm hover:bg-neutral-200 active:scale-95 transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-neutral-200 text-black font-medium text-xs transition-colors"
             >
               Готово
             </button>

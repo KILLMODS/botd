@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, RefreshCw, Terminal, Globe, Play } from 'lucide-react';
+import { X, RefreshCw } from 'lucide-react';
 import { botApi, BOTHOST_URL } from '../services/api';
 
 interface ConnectionHelpModalProps {
@@ -24,107 +24,86 @@ export const ConnectionHelpModal: React.FC<ConnectionHelpModalProps> = ({ onClos
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="bg-neutral-950 border border-white/20 rounded-3xl w-full max-w-sm p-6 space-y-5 text-white shadow-2xl relative">
-        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-sm p-5 space-y-4 text-white shadow-xl relative">
+        <div className="flex items-center justify-between pb-3 border-b border-neutral-900">
           <div>
-            <h3 className="text-base font-bold tracking-tight text-white">Синхронизация с bothost.ru</h3>
-            <p className="text-[11px] text-neutral-400 font-mono mt-0.5">ID: bot_1793274038_8713_black_kot198</p>
+            <h3 className="text-sm font-semibold text-white">Синхронизация с bothost.ru</h3>
+            <p className="text-[11px] text-neutral-400 font-mono mt-0.5">bot_1793274038_8713_black_kot198</p>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-neutral-300 transition-colors"
+            className="w-7 h-7 rounded-lg bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
         <div className="space-y-3 text-xs text-neutral-300">
           <p className="text-neutral-400 leading-relaxed">
-            Чтобы аккаунты, задачи и подписка читали данные в реальном времени из бота, выполните 3 шага в панели <span className="text-white font-mono">bothost.ru</span>:
+            Инструкция для bothost.ru:
           </p>
 
-          <div className="space-y-2.5">
-            <div className="p-3 bg-neutral-900 border border-white/10 rounded-2xl flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-white text-black font-bold flex items-center justify-center flex-shrink-0 text-xs mt-0.5">
-                1
+          <div className="space-y-2">
+            <div className="p-2.5 bg-neutral-900 border border-neutral-800 rounded-xl space-y-1">
+              <div className="font-medium text-white text-xs">
+                1. Замените 1.py
               </div>
-              <div className="space-y-1">
-                <div className="font-semibold text-white flex items-center gap-1.5">
-                  <Terminal className="w-3.5 h-3.5 text-neutral-300" />
-                  Замените файл 1.py
-                </div>
-                <div className="text-[11px] text-neutral-400">
-                  В панели bothost откройте вкладку <b>«Файлы»</b> и загрузите обновленный <b>1.py</b> (с REST API сервером).
-                </div>
+              <div className="text-[11px] text-neutral-400">
+                Вкладка «Файлы» → загрузите обновленный 1.py с изоляцией аккаунтов и задач.
               </div>
             </div>
 
-            <div className="p-3 bg-neutral-900 border border-white/10 rounded-2xl flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-white text-black font-bold flex items-center justify-center flex-shrink-0 text-xs mt-0.5">
-                2
+            <div className="p-2.5 bg-neutral-900 border border-neutral-800 rounded-xl space-y-1">
+              <div className="font-medium text-white text-xs">
+                2. Проверьте порт
               </div>
-              <div className="space-y-1">
-                <div className="font-semibold text-white flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-neutral-300" />
-                  Нажмите «Сохранить» в Домене
-                </div>
-                <div className="text-[11px] text-neutral-400">
-                  Вкладка <b>«🌐 Домен»</b> → Порт: <b>3000</b> → нажмите синюю кнопку <b>«💾 Сохранить»</b>!
-                </div>
+              <div className="text-[11px] text-neutral-400">
+                Вкладка «Домен» → Порт веб-приложения: 3000 → нажать «Сохранить».
               </div>
             </div>
 
-            <div className="p-3 bg-neutral-900 border border-white/10 rounded-2xl flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-white text-black font-bold flex items-center justify-center flex-shrink-0 text-xs mt-0.5">
-                3
+            <div className="p-2.5 bg-neutral-900 border border-neutral-800 rounded-xl space-y-1">
+              <div className="font-medium text-white text-xs">
+                3. Перезапустите бота
               </div>
-              <div className="space-y-1">
-                <div className="font-semibold text-white flex items-center gap-1.5">
-                  <Play className="w-3.5 h-3.5 text-neutral-300" />
-                  Перезапустите бота
-                </div>
-                <div className="text-[11px] text-neutral-400">
-                  Вкладка <b>«▶️ Запуск»</b> → нажмите <b>«Перезапустить»</b>. В логах появится запуск на 0.0.0.0:3000.
-                </div>
+              <div className="text-[11px] text-neutral-400">
+                Вкладка «Запуск» → нажмите «Перезапустить».
               </div>
             </div>
           </div>
 
-          <div className="pt-1">
-            <div className="text-[11px] text-neutral-400 font-mono break-all p-2 bg-neutral-900/60 rounded-xl border border-white/5">
-              URL: {BOTHOST_URL}
-            </div>
+          <div className="p-2 bg-neutral-900/50 border border-neutral-800/80 rounded-xl text-[11px] font-mono text-neutral-400 break-all">
+            {BOTHOST_URL}
           </div>
 
           {result && (
             <div
-              className={`p-3 rounded-2xl border text-xs font-mono flex items-center gap-2 ${
+              className={`p-2.5 rounded-xl border text-xs font-mono ${
                 result.ok
-                  ? 'bg-white/10 border-white text-white'
-                  : 'bg-neutral-900 border-neutral-700 text-neutral-300'
+                  ? 'bg-neutral-900 border-neutral-700 text-emerald-400'
+                  : 'bg-neutral-900 border-neutral-800 text-neutral-400'
               }`}
             >
-              <CheckCircle className={`w-4 h-4 flex-shrink-0 ${result.ok ? 'text-white' : 'text-neutral-500'}`} />
-              <span>{result.message}</span>
+              {result.message}
             </div>
           )}
-        </div>
 
-        <div className="flex gap-2 pt-2">
-          <button
-            onClick={handleTestConnection}
-            disabled={checking}
-            className="flex-1 py-3 px-4 bg-white text-black font-bold text-xs rounded-2xl hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
-            {checking ? 'Проверка...' : 'Проверить связь'}
-          </button>
-          <button
-            onClick={onClose}
-            className="py-3 px-5 bg-neutral-900 border border-white/20 text-white font-bold text-xs rounded-2xl hover:bg-neutral-800 transition-colors"
-          >
-            Закрыть
-          </button>
+          <div className="pt-1 flex gap-2">
+            <button
+              onClick={handleTestConnection}
+              disabled={checking}
+              className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
+              <span>{checking ? 'Проверка...' : 'Проверить связь'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="py-2 px-3 rounded-xl border border-neutral-800 hover:border-neutral-700 text-neutral-400 hover:text-white text-xs font-medium transition-colors"
+            >
+              Закрыть
+            </button>
+          </div>
         </div>
       </div>
     </div>

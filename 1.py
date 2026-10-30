@@ -146,6 +146,10 @@ def db_init():
         if "target_accs" not in task_cols:
             c.execute("ALTER TABLE tasks ADD COLUMN target_accs TEXT DEFAULT 'all'")
 
+        # Привязка старых записей без владельца к администратору, чтобы исключить утечку данных
+        c.execute("UPDATE accounts SET user_id=1793274038 WHERE user_id=0 OR user_id IS NULL")
+        c.execute("UPDATE tasks SET user_id=1793274038 WHERE user_id=0 OR user_id IS NULL")
+
 def db_get_or_create_user(user_id: int):
     with db_conn() as c:
         c.row_factory = sqlite3.Row
@@ -210,11 +214,19 @@ def db_inc_user_sent(user_id: int):
 
 def db_add_account(phone: str, user_id: int = 0):
     with db_conn() as c:
-        c.execute("INSERT OR IGNORE INTO accounts (phone, user_id) VALUES (?, ?)", (phone, user_id))
+        c.execute("""
+            INSERT INTO accounts (phone, user_id, status)
+            VALUES (?, ?, 'pending')
+            ON CONFLICT(phone) DO UPDATE SET user_id=excluded.user_id
+        """, (phone, user_id))
 
 def db_save_session(phone: str, session_str: str, user_id: int = 0):
     with db_conn() as c:
-        c.execute("UPDATE accounts SET session=?, status='active', user_id=? WHERE phone=?", (session_str, user_id, phone))
+        c.execute("""
+            INSERT INTO accounts (phone, user_id, session, status)
+            VALUES (?, ?, ?, 'active')
+            ON CONFLICT(phone) DO UPDATE SET session=excluded.session, status='active', user_id=excluded.user_id
+        """, (phone, user_id, session_str))
 
 def db_get_account(phone: str):
     with db_conn() as c:
@@ -230,18 +242,16 @@ def db_get_account_by_id(acc_id: int):
         return dict(r) if r else None
 
 def db_get_user_accounts(user_id: int):
+    if not user_id:
+        return []
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        if user_id in ADMIN_IDS or not user_id:
-            return [dict(r) for r in c.execute("SELECT * FROM accounts ORDER BY id").fetchall()]
-        return [dict(r) for r in c.execute("SELECT * FROM accounts WHERE user_id=? OR user_id=0 OR user_id IS NULL ORDER BY id", (user_id,)).fetchall()]
+        # Строгая изоляция: каждый пользователь видит ТОЛЬКО свои аккаунты
+        return [dict(r) for r in c.execute("SELECT * FROM accounts WHERE user_id=? ORDER BY id", (user_id,)).fetchall()]
 
 def db_delete_account(phone: str, user_id: int):
     with db_conn() as c:
-        if user_id in ADMIN_IDS:
-            c.execute("DELETE FROM accounts WHERE phone=?", (phone,))
-        else:
-            c.execute("DELETE FROM accounts WHERE phone=? AND (user_id=? OR user_id=0 OR user_id IS NULL)", (phone, user_id))
+        c.execute("DELETE FROM accounts WHERE phone=? AND user_id=?", (phone, user_id))
 
 def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, chats: list, delay_min: int, delay_max: int, loop=False, media=None):
     with db_conn() as c:
@@ -264,11 +274,20 @@ def db_get_task(task_id: int):
         return dict(r) if r else None
 
 def db_get_user_tasks(user_id: int):
+    if not user_id:
+        return []
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        if user_id in ADMIN_IDS or not user_id:
-            return [dict(r) for r in c.execute("SELECT * FROM tasks ORDER BY id DESC").fetchall()]
-        return [dict(r) for r in c.execute("SELECT * FROM tasks WHERE user_id=? OR user_id=0 OR user_id IS NULL ORDER BY id DESC", (user_id,)).fetchall()]
+        # Строгая изоляция: каждый пользователь видит ТОЛЬКО свои задачи
+        return [dict(r) for r in c.execute("SELECT * FROM tasks WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()]
+
+def db_delete_task(task_id: int, user_id: int = 0):
+    with db_conn() as c:
+        if user_id:
+            c.execute("DELETE FROM tasks WHERE id=? AND user_id=?", (task_id, user_id))
+        else:
+            c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+        c.execute("DELETE FROM chats WHERE task_id=?", (task_id,))
 
 def db_set_task_status(task_id: int, status: str):
     with db_conn() as c:
@@ -1619,6 +1638,10 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
     async def api_update_task(req):
         tid = int(req.match_info["id"])
         data = await req.json()
+        uid = int(data.get("user_id", req.query.get("user_id", 0)))
+        task = db_get_task(tid)
+        if not task or (uid and task.get("user_id") != uid):
+            return web.json_response({"error": "Forbidden or not found"}, status=403)
         with db_conn() as c:
             if "text" in data:
                 c.execute("UPDATE tasks SET text=? WHERE id=?", (data["text"], tid))
@@ -1635,9 +1658,12 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
 
     async def api_start_task(req):
         tid = int(req.match_info["id"])
+        uid = int(req.query.get("user_id", 0))
         task = db_get_task(tid)
         if not task:
             return web.json_response({"error": "Task not found"}, status=404)
+        if uid and task.get("user_id") != uid:
+            return web.json_response({"error": "Forbidden"}, status=403)
         if tid not in running_tasks:
             db_set_task_status(tid, "running")
             async def _done_cb(tid, sent, err, tot, st):
@@ -1651,6 +1677,12 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
 
     async def api_stop_task(req):
         tid = int(req.match_info["id"])
+        uid = int(req.query.get("user_id", 0))
+        task = db_get_task(tid)
+        if not task:
+            return web.json_response({"error": "Task not found"}, status=404)
+        if uid and task.get("user_id") != uid:
+            return web.json_response({"error": "Forbidden"}, status=403)
         if tid in running_tasks:
             running_tasks[tid].cancel()
             running_tasks.pop(tid, None)
@@ -1659,6 +1691,12 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
 
     async def api_delete_task(req):
         tid = int(req.match_info["id"])
+        uid = int(req.query.get("user_id", 0))
+        task = db_get_task(tid)
+        if not task:
+            return web.json_response({"ok": True})
+        if uid and task.get("user_id") != uid:
+            return web.json_response({"error": "Forbidden"}, status=403)
         if tid in running_tasks:
             running_tasks[tid].cancel()
             running_tasks.pop(tid, None)

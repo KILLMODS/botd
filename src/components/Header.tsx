@@ -10,11 +10,11 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ user, isConnected = false, onOpenConnectionHelp }) => {
   return (
-    <header className="sticky top-0 z-30 px-4 pt-3 pb-2.5 backdrop-blur-2xl bg-black/80 border-b border-white/10 select-none">
+    <header className="sticky top-0 z-30 px-4 py-3 bg-black/80 backdrop-blur-xl border-b border-neutral-900 select-none">
       <div className="max-w-md mx-auto flex items-center justify-between">
-        {/* Avatar & User info */}
+        {/* User Info */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full border border-white/20 overflow-hidden bg-neutral-900 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <div className="w-9 h-9 rounded-full border border-neutral-800 overflow-hidden bg-neutral-900 flex items-center justify-center flex-shrink-0">
             {user.photo_url ? (
               <img
                 src={user.photo_url}
@@ -25,48 +25,43 @@ export const Header: React.FC<HeaderProps> = ({ user, isConnected = false, onOpe
                 }}
               />
             ) : (
-              <UserIcon className="w-5 h-5 text-neutral-300" />
+              <UserIcon className="w-4 h-4 text-neutral-400" />
             )}
           </div>
 
-          <div>
+          <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight text-white">
+              <span className="font-semibold text-sm text-white leading-tight">
                 {user.first_name || 'TG Broadcaster'}
               </span>
-              <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-white text-black">
+              <span className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded-md bg-neutral-800 text-neutral-200">
                 {user.sub_plan}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-neutral-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-white inline-block"></span>
-              <span className="text-[11px] font-mono">ID: {user.user_id}</span>
+            <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 font-mono mt-0.5">
+              <span>ID: {user.user_id}</span>
               {user.username && (
                 <>
-                  <span className="text-neutral-600">•</span>
-                  <span className="text-[11px] text-neutral-300">@{user.username}</span>
+                  <span>•</span>
+                  <span>@{user.username}</span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Sync Status Badge */}
+        {/* Sync Status Button */}
         {onOpenConnectionHelp && (
           <button
             onClick={onOpenConnectionHelp}
-            className={`px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium flex items-center gap-1.5 transition-all ${
-              isConnected
-                ? 'bg-neutral-900 border-white/30 text-white'
-                : 'bg-neutral-950 border-white/20 text-neutral-400 hover:border-white/40'
-            }`}
+            className="px-2.5 py-1 rounded-full border border-neutral-800 bg-neutral-900/60 text-[11px] font-mono text-neutral-400 hover:text-white hover:border-neutral-700 transition-colors flex items-center gap-1.5"
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isConnected ? 'bg-white animate-pulse' : 'bg-neutral-600'
+                isConnected ? 'bg-emerald-400' : 'bg-neutral-600'
               }`}
             />
-            <span>{isConnected ? 'bothost' : 'офлайн'}</span>
+            <span>{isConnected ? 'online' : 'bothost'}</span>
           </button>
         )}
       </div>

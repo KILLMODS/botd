@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AccountItem, UserProfile } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { Plus, Trash2, Smartphone, FileCode } from 'lucide-react';
+import { Plus, Trash2, Smartphone } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface AccountsViewProps {
@@ -37,19 +37,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-28 animate-in fade-in duration-200">
-      {/* Top Banner */}
-      <div className="bg-neutral-900/70 border border-white/15 rounded-3xl p-4 flex items-center justify-between backdrop-blur-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
-            <Smartphone className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-white">Аккаунты Telegram</h2>
-            <p className="text-xs text-neutral-400">
-              Подключено: <span className="font-mono text-white font-bold">{accounts.length}</span> из {plan.max_accounts}
-            </p>
-          </div>
+    <div className="space-y-4 pb-28">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-1 pt-1">
+        <div>
+          <h2 className="text-base font-semibold text-white">Аккаунты</h2>
+          <p className="text-xs text-neutral-400">
+            Подключено {accounts.length} из {plan.max_accounts}
+          </p>
         </div>
 
         {isLimitReached && (
@@ -58,7 +53,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               triggerHaptic('light');
               onGoToSub();
             }}
-            className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-white text-black active:scale-95 transition-transform"
+            className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-800 text-neutral-300 hover:text-white transition-colors"
           >
             Лимит тарифа
           </button>
@@ -66,63 +61,52 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
       </div>
 
       {/* Primary Actions */}
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <button
           onClick={() => {
             if (isLimitReached) {
               triggerHaptic('error');
-              alert(`На вашем тарифе ${plan.name} доступно максимум ${plan.max_accounts} акк. Перейдите во вкладку «Подписка» для расширения!`);
+              alert(`На тарифе ${plan.name} доступно максимум ${plan.max_accounts} акк. Смените тариф во вкладке «Подписка»!`);
               return;
             }
             triggerHaptic('medium');
             onOpenAddModal('phone');
           }}
-          className={`w-full py-3.5 px-5 rounded-3xl flex items-center justify-center gap-2.5 font-bold text-sm tracking-wide transition-all duration-200 active:scale-[0.98] ${
+          className={`py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium text-xs tracking-wide transition-all ${
             isLimitReached
-              ? 'bg-neutral-800 text-neutral-500 border border-white/5 cursor-not-allowed'
-              : 'bg-white text-black hover:bg-neutral-200 shadow-lg'
+              ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
+              : 'bg-white text-black hover:bg-neutral-200'
           }`}
         >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>Добавить аккаунт (По номеру)</span>
+          <Plus className="w-4 h-4" />
+          <span>Добавить аккаунт</span>
         </button>
 
         <button
           onClick={() => {
             if (isLimitReached) {
               triggerHaptic('error');
-              alert(`На вашем тарифе ${plan.name} доступно максимум ${plan.max_accounts} акк.`);
+              alert(`На тарифе ${plan.name} доступно максимум ${plan.max_accounts} акк.`);
               return;
             }
             triggerHaptic('light');
             onOpenAddModal('session');
           }}
-          className="w-full py-2.5 px-4 rounded-2xl bg-neutral-900 border border-white/10 hover:border-white/20 text-xs font-semibold text-neutral-300 hover:text-white flex items-center justify-center gap-2 active:scale-95 transition-all"
+          className="py-3 px-4 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-xs font-medium text-neutral-300 hover:text-white flex items-center justify-center gap-2 transition-all"
         >
-          <FileCode className="w-4 h-4 text-white" />
-          <span>Импорт готовой StringSession</span>
+          <span>Импорт StringSession</span>
         </button>
       </div>
 
       {/* Accounts List */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-            Список номеров ({accounts.length})
-          </h3>
-        </div>
-
+      <div className="space-y-2">
         {accounts.length === 0 ? (
-          <div className="bg-neutral-900/60 border border-white/10 rounded-3xl p-8 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 mx-auto">
-              <Smartphone className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-white">Нет подключенных аккаунтов</h4>
-              <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1">
-                Нажмите кнопку «Добавить аккаунт» выше для входа по номеру телефона или импорта StringSession.
-              </p>
-            </div>
+          <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-8 text-center space-y-2">
+            <Smartphone className="w-8 h-8 text-neutral-600 mx-auto" />
+            <h4 className="text-sm font-medium text-white">Нет подключенных аккаунтов</h4>
+            <p className="text-xs text-neutral-400 max-w-xs mx-auto">
+              Нажмите «Добавить аккаунт» для входа по номеру или импорта Telethon session.
+            </p>
           </div>
         ) : (
           accounts.map((acc) => {
@@ -132,44 +116,37 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             return (
               <div
                 key={acc.id}
-                className="bg-neutral-900/70 border border-white/15 rounded-3xl p-4 flex items-center justify-between gap-3 backdrop-blur-2xl"
+                className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-3.5 flex items-center justify-between gap-3"
               >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center flex-shrink-0 text-white">
-                    <Smartphone className="w-5 h-5" />
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-neutral-800 border border-neutral-700/60 flex items-center justify-center flex-shrink-0 text-neutral-300">
+                    <Smartphone className="w-4 h-4" />
                   </div>
 
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-white font-mono tracking-wide truncate">
+                      <span className="font-mono text-sm font-medium text-white truncate">
                         {acc.phone}
                       </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        isBanned ? 'bg-neutral-800 text-neutral-400' : 'bg-white text-black'
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                        isBanned ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-800 text-emerald-400'
                       }`}>
                         {isBanned ? 'Бан' : 'Активен'}
                       </span>
                     </div>
-
-                    <div className="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
-                      <span className="font-mono text-[11px]">ID: {acc.id}</span>
-                      {acc.first_name && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate text-neutral-300 text-[11px]">{acc.first_name}</span>
-                        </>
-                      )}
-                    </div>
+                    <span className="text-[11px] text-neutral-500 font-mono">
+                      ID #{acc.id}
+                    </span>
                   </div>
                 </div>
 
                 <button
-                  onClick={() => handleDelete(acc)}
                   disabled={isDeleting}
-                  className="w-9 h-9 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/10 text-neutral-400 hover:text-white flex items-center justify-center active:scale-90 transition-all flex-shrink-0"
-                  title="Удалить"
+                  onClick={() => handleDelete(acc)}
+                  className="px-2.5 py-1.5 rounded-lg border border-neutral-800 hover:border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-red-400 text-xs font-medium transition-colors flex items-center gap-1.5"
                 >
-                  <Trash2 className={`w-4 h-4 ${isDeleting ? 'animate-spin' : ''}`} />
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Удалить</span>
                 </button>
               </div>
             );

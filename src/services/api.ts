@@ -436,10 +436,10 @@ class BotSyncService {
     const userId = tgUser?.id || DEFAULT_USER_ID;
 
     try {
-      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}`, {
+      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}?user_id=${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({ ...updates, user_id: userId }),
         signal: AbortSignal.timeout(4000)
       });
       if (res.ok) {
@@ -473,7 +473,7 @@ class BotSyncService {
 
     try {
       const endpoint = nextStatus === 'running' ? 'start' : 'stop';
-      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}/${endpoint}`, {
+      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}/${endpoint}?user_id=${userId}`, {
         method: 'POST',
         signal: AbortSignal.timeout(4000)
       });
@@ -500,7 +500,7 @@ class BotSyncService {
     const tgUser = getTelegramUser();
     const userId = tgUser?.id || DEFAULT_USER_ID;
     try {
-      await fetch(`${this.apiUrl}/api/tasks/${taskId}`, { method: 'DELETE', signal: AbortSignal.timeout(4000) });
+      await fetch(`${this.apiUrl}/api/tasks/${taskId}?user_id=${userId}`, { method: 'DELETE', signal: AbortSignal.timeout(4000) });
     } catch {
       // continue
     }
