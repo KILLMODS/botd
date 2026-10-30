@@ -43,6 +43,9 @@ ADMIN_IDS        = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "1793274
 # Ключ CryptoBot
 CRYPTO_BOT_TOKEN = os.environ.get("CRYPTO_BOT_TOKEN", "662370:AARfAYc3i7xelw6VdEomWOY043wF8cQ4wGb")
 
+# Стикер при старте бота
+START_STICKER_ID = os.environ.get("START_STICKER_ID", "CAACAgIAAxkBAAEIAmBq5MkBToi2h9uzfgOg4JDOvbjpugACKTgAAovFGUiy079RHVMMJT0E")
+
 # Обязательный канал для проверки подписки при старте (username с @ или пустая строка/off)
 REQUIRED_CHANNEL = os.environ.get("REQUIRED_CHANNEL", "").strip()
 
@@ -1302,6 +1305,13 @@ def register_handlers(bot: TelegramClient):
                 buttons=terms_keyboard()
             )
             return
+
+        # Отправка стартового стикера перед сообщением с кнопками главного меню
+        if START_STICKER_ID:
+            try:
+                await bot.send_file(uid, START_STICKER_ID)
+            except Exception as ex:
+                log.warning(f"Не удалось отправить стартовый стикер: {ex}")
 
         await e.respond(welcome_text(uid), buttons=main_menu_keyboard(uid))
 
