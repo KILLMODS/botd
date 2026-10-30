@@ -553,15 +553,37 @@ class BotSyncService {
 
     const calculatedStars = customAmount !== undefined ? customAmount : Math.max(1, Math.round((plan.price_stars / 30) * days));
 
-    try {
-      const payload = {
-        title: `Подписка ${plan.name} (${days} дн.)`,
-        description: `Тариф ${plan.name} на ${days} дн. в TG Broadcaster (лимит ${plan.daily_limit} сообщ/день, до ${plan.max_accounts} акк).`,
-        payload: `sub_${plan.id}_${userId}_${days}_${Date.now()}`,
-        currency: 'XTR',
-        prices: [{ label: `${plan.name} (${days} дн.)`, amount: calculatedStars }]
-      };
+    const payload = {
+      title: `Подписка ${plan.name} (${days} дн.)`,
+      description: `Тариф ${plan.name} на ${days} дн. в TG Broadcaster (лимит ${plan.daily_limit} сообщ/день, до ${plan.max_accounts} акк).`,
+      payload: `sub_${plan.id}_${userId}_${days}_${Date.now()}`,
+      currency: 'XTR',
+      prices: [{ label: `${plan.name} (${days} дн.)`, amount: calculatedStars }]
+    };
 
+    // 1. Try server proxy endpoint first (avoids CORS)
+    try {
+      const res = await fetch('/api/proxy/telegram/createInvoiceLink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result) {
+          return { ok: true, invoice_link: data.result };
+        }
+        if (data.error) {
+          return { ok: false, error: String(data.error) };
+        }
+      }
+    } catch {
+      // continue to fallback
+    }
+
+    // 2. Fallback to direct call
+    try {
       const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -589,15 +611,57 @@ class BotSyncService {
 
     const calculatedUsd = customAmount !== undefined ? customAmount : Number(((plan.price_usd / 30) * days).toFixed(2));
 
-    try {
-      const payload = {
-        asset: 'USDT',
-        amount: String(calculatedUsd),
-        description: `Подписка ${plan.name} на ${days} дн. для пользователя ID ${userId}`,
-        paid_btn_name: 'openBot',
-        paid_btn_url: 'https://t.me/CryptoBot'
-      };
+    const payload = {
+      asset: 'USDT',
+      amount: String(calculatedUsd),
+      description: `Подписка ${plan.name} на ${days} дн. для пользователя ID ${userId}`,
+      paid_btn_name: 'openBot',
+      paid_btn_url: 'https://t.me/CryptoBot'
+    };
 
+    // 1. Try server proxy endpoint first (ZERO CORS issues!)
+    try {
+      const res = await fetch('/api/proxy/cryptobot/createInvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result) {
+          const inv = data.result;
+          const payUrl = inv.bot_invoice_url || inv.mini_app_invoice_url || inv.pay_url;
+          return { ok: true, invoice_url: payUrl, invoice_id: inv.invoice_id };
+        }
+        if (data.error) {
+          return { ok: false, error: String(data.error) };
+        }
+      }
+    } catch {
+      // continue to next method
+    }
+
+    // 2. Try Python backend API if running
+    try {
+      const res = await fetch(`${this.apiUrl}/api/subscription/cryptobot_invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, plan: planKey, days, amount_usd: calculatedUsd }),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.invoice_url) {
+          return { ok: true, invoice_url: data.invoice_url, invoice_id: data.invoice_id };
+        }
+      }
+    } catch {
+      // continue to fallback
+    }
+
+    // 3. Fallback direct request
+    try {
       const res = await fetch('https://pay.crypt.bot/api/createInvoice', {
         method: 'POST',
         headers: {
@@ -623,6 +687,23 @@ class BotSyncService {
 
   // --- CHECK CRYPTOBOT INVOICE STATUS ---
   async checkCryptoInvoice(invoiceId: number): Promise<boolean> {
+    // 1. Try server proxy first
+    try {
+      const res = await fetch(`/api/proxy/cryptobot/getInvoices?invoice_ids=${invoiceId}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(7000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result?.items?.length > 0) {
+          return data.result.items[0].status === 'paid';
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    // 2. Direct fallback
     try {
       const res = await fetch(`https://pay.crypt.bot/api/getInvoices?invoice_ids=${invoiceId}`, {
         method: 'GET',

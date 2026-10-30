@@ -1045,9 +1045,24 @@ def task_action_keyboard(task_id: int):
 
 def sub_keyboard():
     return [
-        [styled_btn("🚀 Pro (69 ⭐ / $1.99)", b"buy_pro_stars", style="primary"), styled_btn("💎 Premium+ (159 ⭐ / $4.49)", b"buy_premium_stars", style="primary")],
-        [styled_btn("🤖 Оплатить через CryptoBot (USDT)", b"buy_crypto", style="success")],
+        [styled_btn("🚀 Тариф Pro (от 1 до 90 дн.)", b"sub_choose_pro", style="primary")],
+        [styled_btn("💎 Тариф Premium+ (от 1 до 90 дн.)", b"sub_choose_premium", style="primary")],
         [styled_btn("🔙 Главное меню", b"main_menu")]
+    ]
+
+def sub_days_keyboard(plan_name: str):
+    return [
+        [styled_btn("7 дней", f"sub_days_{plan_name}_7".encode()), styled_btn("14 дней", f"sub_days_{plan_name}_14".encode()), styled_btn("30 дней", f"sub_days_{plan_name}_30".encode(), style="primary")],
+        [styled_btn("60 дней", f"sub_days_{plan_name}_60".encode()), styled_btn("90 дней", f"sub_days_{plan_name}_90".encode(), style="primary")],
+        [styled_btn("✍️ Ввести своё число (1–90)", f"sub_custom_days_{plan_name}".encode(), style="success")],
+        [styled_btn("🔙 Назад к тарифам", b"menu_sub")]
+    ]
+
+def sub_pay_method_keyboard(plan_name: str, days: int, stars: int, usd: float):
+    return [
+        [styled_btn(f"⭐ Оплатить Telegram Stars ({stars} ⭐)", f"pay_stars_{plan_name}_{days}".encode(), style="primary")],
+        [styled_btn(f"🤖 Оплатить в CryptoBot (${usd} USDT)", f"pay_crypto_{plan_name}_{days}".encode(), style="success")],
+        [styled_btn("🔙 Выбрать другой срок", f"sub_choose_{plan_name}".encode())]
     ]
 
 def admin_keyboard():
@@ -1307,9 +1322,13 @@ def register_handlers(bot: TelegramClient):
                     if len(parts) >= 3 and parts[0] == "sub":
                         plan_name = parts[1]
                         user_id = int(parts[2])
-                        db_update_user_sub(user_id, plan_name, 30, method="stars", amount=SUBSCRIPTION_PLANS[plan_name]["price_stars"])
+                        days = 30
+                        if len(parts) >= 4 and parts[3].isdigit():
+                            days = max(1, min(90, int(parts[3])))
+                        amount_paid = getattr(payment, 'total_amount', 0)
+                        db_update_user_sub(user_id, plan_name, days, method="stars", amount=amount_paid)
                         try:
-                            await bot.send_message(user_id, f"🎉 **Подписка {plan_name.upper()} успешно оплачена через Telegram Stars и активирована на 30 дней!**", buttons=main_menu_keyboard(user_id))
+                            await bot.send_message(user_id, f"🎉 **Подписка {plan_name.upper()} успешно оплачена через Telegram Stars и активирована на {days} дн.!**", buttons=main_menu_keyboard(user_id))
                         except Exception as ex:
                             log.error(f"Error notifying payment: {ex}")
         except Exception:
@@ -1773,75 +1792,123 @@ def register_handlers(bot: TelegramClient):
                 await e.respond(f"❌ Ошибка создания задачи: `{ex}`", buttons=main_menu_keyboard(uid))
                 states.pop(uid, None)
 
-        # ── ОПЛАТА ──
-        elif data == "buy_crypto":
-            buttons = [
-                [styled_btn("🚀 Pro ($1.99 USDT)", b"pay_crypto_pro", style="primary")],
-                [styled_btn("💎 Premium+ ($4.49 USDT)", b"pay_crypto_premium", style="primary")],
-                [styled_btn("🔙 Отмена", b"menu_sub", style="danger")]
-            ]
-            await e.edit("🤖 **Оплата через CryptoBot (USDT):**\nВыберите нужный тариф:", buttons=buttons)
-
-        elif data in ["pay_crypto_pro", "pay_crypto_premium"]:
-            plan_name = "pro" if data == "pay_crypto_pro" else "premium"
+        # ── ОПЛАТА ПОДПИСОК (ОТ 1 ДО 90 ДНЕЙ) ──
+        elif data in ["sub_choose_pro", "sub_choose_premium"]:
+            plan_name = "pro" if data == "sub_choose_pro" else "premium"
             plan = SUBSCRIPTION_PLANS[plan_name]
-            inv = await create_cryptobot_invoice(plan["price_usd"], f"Подписка {plan['name']}")
+            await e.edit(
+                f"⭐ **Настройка подписки {plan['name']}**\n\n"
+                f"• Лимит: **{plan['daily_limit']}** сообщ/день\n"
+                f"• Аккаунтов: до **{plan['max_accounts']}** шт.\n"
+                f"• Мин. задержка: от **{plan['min_delay']}** сек.\n\n"
+                f"Выберите срок подписки (от 1 до 90 дней):",
+                buttons=sub_days_keyboard(plan_name)
+            )
 
-            if inv and inv.get("pay_url") and inv.get("invoice_id"):
-                pay_url = inv["pay_url"]
-                inv_id = inv["invoice_id"]
-                buttons = [
-                    [Button.url("💳 Перейти к оплате (CryptoBot)", pay_url)],
-                    [styled_btn("✅ Я оплатил", f"check_crypto_{plan_name}_{inv_id}".encode(), style="success")],
-                    [styled_btn("🔙 Назад", b"buy_crypto")]
-                ]
-                await e.edit(
-                    f"🤖 **Счёт #{inv_id} на оплату тарифа {plan['name']}**\n\n"
-                    f"💰 Сумма к оплате: **{plan['price_usd']} USDT**\n\n"
-                    f"Нажмите кнопку ниже для перехода в CryptoBot:",
-                    buttons=buttons
-                )
-            else:
-                await e.edit("⚠️ Ошибка генерации счета. Попробуйте позже или выберите оплату картой/Stars.", buttons=[[styled_btn("🔙 Назад", b"buy_crypto")]])
-
-        elif data.startswith("check_crypto_"):
+        elif data.startswith("sub_days_"):
             parts = data.split("_")
             if len(parts) >= 4:
                 plan_name = parts[2]
-                inv_id = int(parts[3])
+                days = max(1, min(90, int(parts[3])))
+                plan = SUBSCRIPTION_PLANS[plan_name]
+                stars = max(1, round((plan["price_stars"] / 30) * days))
+                usd = round((plan["price_usd"] / 30) * days, 2)
+                await e.edit(
+                    f"💳 **Оплата тарифа {plan['name']} на {days} дн.**\n\n"
+                    f"💰 Стоимость:\n"
+                    f"• **{stars} ⭐ (Telegram Stars)**\n"
+                    f"• **${usd} USDT (CryptoBot)**\n\n"
+                    f"Выберите способ оплаты:",
+                    buttons=sub_pay_method_keyboard(plan_name, days, stars, usd)
+                )
+
+        elif data.startswith("sub_custom_days_"):
+            plan_name = data.replace("sub_custom_days_", "")
+            states[uid] = {"state": "input_sub_days", "plan_name": plan_name}
+            await e.edit(
+                f"✍️ **Введите желаемое количество дней подписки (от 1 до 90) в чат:**\n\n"
+                f"Например: `1`, `7`, `15`, `45`, `90`",
+                buttons=[[styled_btn("🔙 Назад к выбору срока", f"sub_choose_{plan_name}".encode())]]
+            )
+
+        elif data.startswith("pay_stars_"):
+            parts = data.split("_")
+            if len(parts) >= 4:
+                plan_name = parts[2]
+                days = max(1, min(90, int(parts[3])))
+                plan = SUBSCRIPTION_PLANS[plan_name]
+                stars = max(1, round((plan["price_stars"] / 30) * days))
+
+                invoice = InputMediaInvoice(
+                    invoice=Invoice(
+                        currency="XTR",
+                        prices=[types.LabeledPrice(label=f"Подписка {plan['name']} ({days} дн.)", amount=stars)],
+                        test=False
+                    ),
+                    title=f"Подписка {plan['name']} ({days} дн.)",
+                    description=f"Оплата подписки {plan['name']} на {days} дн. в TG Broadcaster",
+                    start_param="sub_payment",
+                    payload=f"sub_{plan_name}_{uid}_{days}_{int(time.time())}".encode(),
+                    provider_data=types.DataJSON(data="{}")
+                )
+                try:
+                    await bot.send_message(uid, f"⭐ **Счёт на оплату {plan['name']} на {days} дн. ({stars} Stars):**", file=invoice)
+                    await e.answer("📩 Счёт на оплату Stars отправлен сообщением!")
+                except Exception as ex:
+                    log.error(f"Stars invoice error: {ex}")
+                    await e.answer(f"Ошибка выставления счета Stars: {ex}", alert=True)
+
+        elif data.startswith("pay_crypto_"):
+            parts = data.split("_")
+            if len(parts) >= 4:
+                plan_name = parts[2]
+                days = max(1, min(90, int(parts[3])))
+                plan = SUBSCRIPTION_PLANS[plan_name]
+                usd = round((plan["price_usd"] / 30) * days, 2)
+                inv = await create_cryptobot_invoice(usd, f"Подписка {plan['name']} на {days} дн. для TG ID {uid}")
+
+                if inv and (inv.get("pay_url") or inv.get("bot_invoice_url")) and inv.get("invoice_id"):
+                    pay_url = inv.get("bot_invoice_url") or inv.get("mini_app_invoice_url") or inv.get("pay_url")
+                    inv_id = inv["invoice_id"]
+                    buttons = [
+                        [Button.url("💳 Перейти к оплате (CryptoBot)", pay_url)],
+                        [styled_btn("✅ Я оплатил", f"check_crypto_{plan_name}_{days}_{inv_id}".encode(), style="success")],
+                        [styled_btn("🔙 Назад", f"sub_days_{plan_name}_{days}".encode())]
+                    ]
+                    await e.edit(
+                        f"🤖 **Счёт #{inv_id} на оплату тарифа {plan['name']} ({days} дн.)**\n\n"
+                        f"💰 Сумма к оплате: **${usd} USDT**\n\n"
+                        f"Нажмите кнопку ниже для перехода в CryptoBot, оплатите чек и нажмите «Я оплатил»:",
+                        buttons=buttons
+                    )
+                else:
+                    await e.edit("⚠️ Не удалось создать счёт в CryptoBot. Попробуйте позже или выберите оплату Telegram Stars.", buttons=[[styled_btn("🔙 Назад", f"sub_days_{plan_name}_{days}".encode())]])
+
+        elif data.startswith("check_crypto_"):
+            parts = data.split("_")
+            if len(parts) >= 5:
+                plan_name = parts[2]
+                days = max(1, min(90, int(parts[3])))
+                inv_id = int(parts[4])
 
                 is_paid = await check_cryptobot_invoice(inv_id)
                 if is_paid:
                     plan = SUBSCRIPTION_PLANS[plan_name]
-                    db_update_user_sub(uid, plan_name, 30, method="cryptobot", amount=plan["price_usd"])
-                    await e.edit(f"🎉 **Подписка {plan_name.upper()} успешно оплачена и активирована на 30 дней!**", buttons=main_menu_keyboard(uid))
+                    usd = round((plan["price_usd"] / 30) * days, 2)
+                    db_update_user_sub(uid, plan_name, days, method="cryptobot", amount=usd)
+                    await e.edit(f"🎉 **Подписка {plan_name.upper()} успешно оплачена через CryptoBot и активирована на {days} дн.!**", buttons=main_menu_keyboard(uid))
                 else:
-                    await e.answer("❌ Счет ещё не оплачен в CryptoBot! Оплатите чек и попробуйте снова.", alert=True)
-            else:
-                await e.answer("❌ Неверные данные счета.", alert=True)
-
-        elif data in ["buy_pro_stars", "buy_premium_stars"]:
-            plan_name = "pro" if data == "buy_pro_stars" else "premium"
-            plan = SUBSCRIPTION_PLANS[plan_name]
-
-            invoice = InputMediaInvoice(
-                invoice=Invoice(
-                    currency="XTR",
-                    prices=[types.LabeledPrice(label=f"Подписка {plan['name']}", amount=plan["price_stars"])],
-                    test=False
-                ),
-                title=f"Подписка {plan['name']}",
-                description=f"Оплата подписки {plan['name']} на 30 дней",
-                start_param="sub_payment",
-                payload=f"sub_{plan_name}_{uid}".encode(),
-                provider_data=types.DataJSON(data="{}")
-            )
-            try:
-                await bot.send_message(uid, f"⭐ **Счёт на оплату {plan['name']} ({plan['price_stars']} Stars):**", file=invoice)
-                await e.answer("📩 Счёт на оплату Stars отправлен сообщением!")
-            except Exception as ex:
-                log.error(f"Stars invoice error: {ex}")
-                await e.answer(f"Ошибка выставления счета Stars: {ex}", alert=True)
+                    await e.answer("❌ Счёт ещё не оплачен в CryptoBot! Оплатите чек в боте @CryptoBot и нажмите снова.", alert=True)
+            elif len(parts) >= 4:
+                plan_name = parts[2]
+                inv_id = int(parts[3])
+                is_paid = await check_cryptobot_invoice(inv_id)
+                if is_paid:
+                    plan = SUBSCRIPTION_PLANS[plan_name]
+                    db_update_user_sub(uid, plan_name, 30, method="cryptobot", amount=plan["price_usd"])
+                    await e.edit(f"🎉 **Подписка {plan_name.upper()} успешно оплачена через CryptoBot и активирована на 30 дн.!**", buttons=main_menu_keyboard(uid))
+                else:
+                    await e.answer("❌ Счёт ещё не оплачен в CryptoBot!", alert=True)
 
     # ── FSM ВВОД ДАННЫХ ──
     @bot.on(events.NewMessage())
@@ -1853,6 +1920,29 @@ def register_handlers(bot: TelegramClient):
         step = st.get("state")
         txt = (e.text or "").strip()
         if not step: return
+
+        if step == "input_sub_days":
+            plan_name = st.get("plan_name", "pro")
+            if not txt.isdigit():
+                await e.respond("❌ Введите целое число дней от 1 до 90 (например: 15 или 45):", buttons=[[styled_btn("❌ Отмена", b"menu_sub", style="danger")]])
+                return
+            days = int(txt)
+            if days < 1 or days > 90:
+                await e.respond("❌ Количество дней должно быть от 1 до 90. Попробуйте ещё раз:", buttons=[[styled_btn("❌ Отмена", b"menu_sub", style="danger")]])
+                return
+            states.pop(uid, None)
+            plan = SUBSCRIPTION_PLANS[plan_name]
+            stars = max(1, round((plan["price_stars"] / 30) * days))
+            usd = round((plan["price_usd"] / 30) * days, 2)
+            await e.respond(
+                f"💳 **Оплата тарифа {plan['name']} на {days} дн.**\n\n"
+                f"💰 Стоимость:\n"
+                f"• **{stars} ⭐ (Telegram Stars)**\n"
+                f"• **${usd} USDT (CryptoBot)**\n\n"
+                f"Выберите способ оплаты:",
+                buttons=sub_pay_method_keyboard(plan_name, days, stars, usd)
+            )
+            return
 
         if step == "session_string":
             if e.file:
@@ -2330,8 +2420,9 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
         data = await req.json()
         uid = int(data.get("user_id", 0))
         plan = data.get("plan", "pro")
+        days = int(data.get("days", 30))
         amount = float(data.get("amount_usd", 1.99))
-        inv = await create_cryptobot_invoice(amount, f"Подписка {plan.upper()} для TG ID {uid}")
+        inv = await create_cryptobot_invoice(amount, f"Подписка {plan.upper()} на {days} дн. для TG ID {uid}")
         if inv:
             return web.json_response({
                 "ok": True,

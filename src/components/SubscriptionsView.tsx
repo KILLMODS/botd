@@ -83,16 +83,10 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
               }
             });
           } else {
-            window.open(res.invoice_link, '_blank');
             setStatusMessage('Инвойс Telegram Stars открыт в новом окне.');
           }
         } else {
-          // Fallback direct activation
-          const updated = await botApi.activateSubscription(user.user_id, fullScreenPlan, selectedDays);
-          onUpdateUser(updated);
-          confetti({ particleCount: 80, spread: 60, origin: { y: 0.5 } });
-          alert(`Подписка ${plan.name} активирована на ${selectedDays} дн.`);
-          setFullScreenPlan(null);
+          setStatusMessage(`Не удалось сформировать счёт: ${res.error || 'попробуйте позже'}`);
         }
       } else {
         // CryptoBot payment
