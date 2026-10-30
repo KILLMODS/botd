@@ -1483,6 +1483,213 @@ def register_handlers(bot: TelegramClient):
             )
 
 # ─────────────────────────────────────────────────────
+#  API СЕРВЕР ДЛЯ TELEGRAM MINI APP (VERCEL SYNC)
+# ─────────────────────────────────────────────────────
+
+from aiohttp import web
+
+@web.middleware
+async def cors_middleware(request, handler):
+    if request.method == "OPTIONS":
+        resp = web.Response(status=200)
+    else:
+        try:
+            resp = await handler(request)
+        except Exception as e:
+            resp = web.json_response({"ok": False, "error": str(e)}, status=500)
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    return resp
+
+def init_api_routes(app: web.Application, bot: TelegramClient):
+    async def api_health(req):
+        return web.json_response({"status": "ok", "message": "TG Broadcaster API is running", "bot_connected": bot.is_connected()})
+
+    async def api_get_user(req):
+        uid = int(req.query.get("user_id", 0))
+        if not uid:
+            return web.json_response({"error": "user_id required"}, status=400)
+        u = db_get_or_create_user(uid)
+        return web.json_response(u)
+
+    async def api_get_accounts(req):
+        uid = int(req.query.get("user_id", 0))
+        accs = db_get_user_accounts(uid)
+        return web.json_response(accs)
+
+    async def api_delete_account(req):
+        acc_id = int(req.match_info["id"])
+        uid = int(req.query.get("user_id", 0))
+        acc = db_get_account_by_id(acc_id)
+        if acc:
+            db_delete_account(acc["phone"], uid)
+        return web.json_response({"ok": True})
+
+    async def api_auth_send_code(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        phone = data.get("phone", "").strip()
+        try:
+            p_hash = await auth_send_code(uid, phone)
+            return web.json_response({"ok": True, "phone_hash": p_hash})
+        except Exception as ex:
+            return web.json_response({"ok": False, "error": str(ex)})
+
+    async def api_auth_confirm_code(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        phone = data.get("phone", "").strip()
+        code = data.get("code", "").strip()
+        try:
+            res = await auth_confirm_code(uid, code)
+            if res == "2fa":
+                return web.json_response({"ok": True, "need_2fa": True})
+            else:
+                db_save_session(phone, res, uid)
+                acc = db_get_account(phone)
+                return web.json_response({"ok": True, "need_2fa": False, "account": acc})
+        except Exception as ex:
+            return web.json_response({"ok": False, "error": str(ex)})
+
+    async def api_auth_confirm_2fa(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        phone = data.get("phone", "").strip()
+        password = data.get("password", "").strip()
+        try:
+            res = await auth_confirm_2fa(uid, password)
+            db_save_session(phone, res, uid)
+            acc = db_get_account(phone)
+            return web.json_response({"ok": True, "account": acc})
+        except Exception as ex:
+            return web.json_response({"ok": False, "error": str(ex)})
+
+    async def api_auth_add_session(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        sess = data.get("session", "").strip()
+        try:
+            res = await add_account_from_session_string(sess, uid)
+            acc = db_get_account(res["phone"])
+            return web.json_response({"ok": True, "account": acc})
+        except Exception as ex:
+            return web.json_response({"ok": False, "error": str(ex)})
+
+    async def api_get_tasks(req):
+        uid = int(req.query.get("user_id", 0))
+        tasks = db_get_user_tasks(uid)
+        for t in tasks:
+            t["chats"] = db_get_pending_chats(t["id"])
+        return web.json_response(tasks)
+
+    async def api_create_task(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        chats = data.get("chats", [])
+        tid = db_create_task(
+            uid,
+            data.get("account_id", 0),
+            data.get("target_accs", "all"),
+            data.get("text", ""),
+            chats,
+            data.get("delay_min", 10),
+            data.get("delay_max", 30),
+            loop=bool(data.get("loop")),
+            media=data.get("media")
+        )
+        task = db_get_task(tid)
+        task["chats"] = chats
+        return web.json_response(task)
+
+    async def api_update_task(req):
+        tid = int(req.match_info["id"])
+        data = await req.json()
+        with db_conn() as c:
+            if "text" in data:
+                c.execute("UPDATE tasks SET text=? WHERE id=?", (data["text"], tid))
+            if "delay_min" in data:
+                c.execute("UPDATE tasks SET delay_min=? WHERE id=?", (data["delay_min"], tid))
+            if "delay_max" in data:
+                c.execute("UPDATE tasks SET delay_max=? WHERE id=?", (data["delay_max"], tid))
+            if "loop" in data:
+                c.execute("UPDATE tasks SET loop=? WHERE id=?", (1 if data["loop"] else 0, tid))
+            if "target_accs" in data:
+                c.execute("UPDATE tasks SET target_accs=? WHERE id=?", (data["target_accs"], tid))
+        task = db_get_task(tid)
+        return web.json_response(task)
+
+    async def api_start_task(req):
+        tid = int(req.match_info["id"])
+        task = db_get_task(tid)
+        if not task:
+            return web.json_response({"error": "Task not found"}, status=404)
+        if tid not in running_tasks:
+            db_set_task_status(tid, "running")
+            async def _done_cb(tid, sent, err, tot, st):
+                pass
+            t = asyncio.create_task(broadcast_multi(
+                task["user_id"], tid, task["text"], task["media"],
+                task["delay_min"], task["delay_max"], _done_cb
+            ))
+            running_tasks[tid] = t
+        return web.json_response({"ok": True, "status": "running"})
+
+    async def api_stop_task(req):
+        tid = int(req.match_info["id"])
+        if tid in running_tasks:
+            running_tasks[tid].cancel()
+            running_tasks.pop(tid, None)
+        db_set_task_status(tid, "stopped")
+        return web.json_response({"ok": True, "status": "stopped"})
+
+    async def api_delete_task(req):
+        tid = int(req.match_info["id"])
+        if tid in running_tasks:
+            running_tasks[tid].cancel()
+            running_tasks.pop(tid, None)
+        with db_conn() as c:
+            c.execute("DELETE FROM tasks WHERE id=?", (tid,))
+            c.execute("DELETE FROM chats WHERE task_id=?", (tid,))
+        return web.json_response({"ok": True})
+
+    async def api_activate_sub(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        plan = data.get("plan", "pro")
+        days = int(data.get("days", 30))
+        db_update_user_sub(uid, plan, days)
+        u = db_get_or_create_user(uid)
+        return web.json_response(u)
+
+    async def api_cryptobot_invoice(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        plan = data.get("plan", "pro")
+        amount = float(data.get("amount_usd", 1.99))
+        inv = await create_cryptobot_invoice(amount, f"Подписка {plan.upper()} для TG ID {uid}")
+        if inv:
+            return web.json_response({"ok": True, "invoice_url": inv.get("bot_invoice_url", inv.get("mini_app_invoice_url", inv.get("pay_url"))), "invoice_id": inv.get("invoice_id")})
+        return web.json_response({"ok": False, "error": "CryptoBot unavailable"})
+
+    app.router.add_get("/api/health", api_health)
+    app.router.add_get("/api/user", api_get_user)
+    app.router.add_get("/api/accounts", api_get_accounts)
+    app.router.add_delete("/api/accounts/{id}", api_delete_account)
+    app.router.add_post("/api/auth/send_code", api_auth_send_code)
+    app.router.add_post("/api/auth/confirm_code", api_auth_confirm_code)
+    app.router.add_post("/api/auth/confirm_2fa", api_auth_confirm_2fa)
+    app.router.add_post("/api/auth/add_session", api_auth_add_session)
+    app.router.add_get("/api/tasks", api_get_tasks)
+    app.router.add_post("/api/tasks", api_create_task)
+    app.router.add_patch("/api/tasks/{id}", api_update_task)
+    app.router.add_post("/api/tasks/{id}/start", api_start_task)
+    app.router.add_post("/api/tasks/{id}/stop", api_stop_task)
+    app.router.add_delete("/api/tasks/{id}", api_delete_task)
+    app.router.add_post("/api/subscription/activate", api_activate_sub)
+    app.router.add_post("/api/subscription/cryptobot_invoice", api_cryptobot_invoice)
+
+# ─────────────────────────────────────────────────────
 #  ЗАПУСК
 # ─────────────────────────────────────────────────────
 
@@ -1500,11 +1707,27 @@ async def main():
         app_version="4.16.30",
         lang_code="ru"
     )
-    await bot.start(bot_token=BOT_TOKEN)
-    log.info("Бот рассылки и управления запущен ✅")
-    register_handlers(bot)
+
+    try:
+        await bot.start(bot_token=BOT_TOKEN)
+        log.info("Бот рассылки и управления запущен ✅")
+        register_handlers(bot)
+    except Exception as ex:
+        log.warning(f"Не удалось запустить Telegram bot клиент ({ex}). API сервер продолжает работу.")
+
+    # Запуск aiohttp REST API сервера для Mini App
+    api_app = web.Application(middlewares=[cors_middleware])
+    init_api_routes(api_app, bot)
+    web_port = int(os.environ.get("WEB_PORT", "8080"))
+    runner = web.AppRunner(api_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", web_port)
+    await site.start()
+    log.info(f"API сервер для Telegram Mini App запущен на http://0.0.0.0:{web_port} ✅")
+
     asyncio.create_task(_auth_sessions_gc_loop())
     await bot.run_until_disconnected()
 
 if __name__ == "__main__":
     asyncio.run(main())
+
