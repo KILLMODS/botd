@@ -15,7 +15,6 @@ import { ConnectionHelpModal } from './components/ConnectionHelpModal';
 import { ReferralModal } from './components/ReferralModal';
 import { TermsModal } from './components/TermsModal';
 import { AdminStatsModal } from './components/AdminStatsModal';
-import { SettingsModal } from './components/SettingsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
@@ -25,7 +24,6 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isServerConnected, setIsServerConnected] = useState(false);
   const [isConnectionHelpOpen, setIsConnectionHelpOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Pull to refresh
   const [pullDistance, setPullDistance] = useState(0);
@@ -157,16 +155,6 @@ export default function App() {
     setUser(prev => prev ? { ...prev, terms_accepted: 1 } : null);
   };
 
-  const handleResetCache = async () => {
-    const tgUser = getTelegramUser();
-    const uid = tgUser?.id || 1793274038;
-    try {
-      localStorage.removeItem(`tgb_tasks_${uid}`);
-      localStorage.removeItem(`tgb_accounts_${uid}`);
-    } catch {}
-    await loadData(true);
-  };
-
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white">
@@ -183,32 +171,46 @@ export default function App() {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="min-h-screen bg-black text-white flex flex-col relative selection:bg-white selection:text-black overflow-x-hidden"
+      className="min-h-screen text-white flex flex-col relative selection:bg-white selection:text-black overflow-x-hidden"
     >
+      {/* Animated Subtle Gray Stripes & Ambient Background */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+        {/* Deep base backdrop */}
+        <div className="absolute inset-0 bg-[#08090d]" />
+
+        {/* Smooth drifting ambient colored glows */}
+        <div className="absolute -top-36 -left-36 w-[450px] h-[450px] rounded-full bg-blue-600/[0.14] blur-[120px] animate-[ambient-pulse-1_14s_ease-in-out_infinite]" />
+        <div className="absolute top-1/3 -right-36 w-[400px] h-[400px] rounded-full bg-indigo-500/[0.11] blur-[130px] animate-[ambient-pulse-2_18s_ease-in-out_infinite]" />
+        <div className="absolute -bottom-28 left-1/4 w-[380px] h-[380px] rounded-full bg-emerald-500/[0.08] blur-[110px] animate-[ambient-pulse-1_16s_ease-in-out_infinite_reverse]" />
+
+        {/* Gray Diagonal Animated Stripes Overlay */}
+        <div className="absolute inset-0 bg-gray-stripes opacity-80" />
+
+        {/* Subtle Vertical Accent Pinstripes */}
+        <div className="absolute inset-0 bg-vertical-grid-stripes opacity-45" />
+
+        {/* Soft Radial Vignette for Content Readability */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,transparent_20%,rgba(0,0,0,0.7)_90%)]" />
+      </div>
+
       {/* Pull to Refresh Indicator */}
       {pullDistance > 0 && (
         <div
           style={{ height: `${pullDistance}px` }}
-          className="overflow-hidden flex items-center justify-center bg-black transition-all duration-100 border-b border-neutral-900"
+          className="relative z-30 overflow-hidden flex items-center justify-center bg-black/60 backdrop-blur-md transition-all duration-100 border-b border-white/[0.06]"
         >
           <div className={`w-4 h-4 rounded-full border-2 border-neutral-400 border-t-transparent ${pullDistance >= 45 ? 'animate-spin' : ''}`} />
-          <span className="text-[11px] font-mono text-neutral-500 ml-2">
+          <span className="text-[11px] font-mono text-neutral-400 ml-2">
             {pullDistance >= 45 ? 'Отпустите для обновления' : 'Потяните для обновления'}
           </span>
         </div>
       )}
 
       {/* Top Header */}
-      <Header
-        user={user}
-        isConnected={isServerConnected}
-        onOpenConnectionHelp={() => setIsConnectionHelpOpen(true)}
-        onOpenAdminStats={() => setIsAdminStatsOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
+      <Header user={user} />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3">
+      <main className="relative z-10 flex-1 max-w-md w-full mx-auto px-4 pt-3">
         {activeTab === 'profile' && (
           <ProfileView
             user={user}
@@ -220,7 +222,6 @@ export default function App() {
               setIsAddAccountOpen(true);
             }}
             onOpenReferrals={() => setIsReferralOpen(true)}
-            onOpenTerms={() => setIsTermsOpen(true)}
           />
         )}
 
@@ -332,16 +333,6 @@ export default function App() {
           onClose={() => setIsCreateTaskOpen(false)}
           onCreate={handleCreateTask}
           onOpenSubscriptions={() => setActiveTab('subscription')}
-        />
-      )}
-
-      {isSettingsOpen && (
-        <SettingsModal
-          user={user}
-          onClose={() => setIsSettingsOpen(false)}
-          onOpenTerms={() => setIsTermsOpen(true)}
-          onOpenSubscriptions={() => setActiveTab('subscription')}
-          onResetCache={handleResetCache}
         />
       )}
     </div>

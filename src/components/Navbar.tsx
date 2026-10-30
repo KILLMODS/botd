@@ -40,8 +40,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 pb-5 pt-2 px-4 pointer-events-none flex justify-center safe-bottom">
-      <nav className="pointer-events-auto bg-[#16171d]/85 backdrop-blur-3xl border border-white/[0.12] rounded-full p-1.5 flex items-center justify-between max-w-sm w-full relative shadow-[0_16px_36px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.18)]">
+    <div className="fixed bottom-0 left-0 right-0 z-40 pb-5 pt-2 px-3 pointer-events-none flex justify-center safe-bottom">
+      <nav className="pointer-events-auto bg-[#16171d]/90 backdrop-blur-3xl border border-white/[0.14] rounded-full p-2 flex items-center justify-between max-w-[430px] w-full gap-1 relative shadow-[0_20px_40px_rgba(0,0,0,0.7),inset_0_1px_0_0_rgba(255,255,255,0.2)]">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 triggerHaptic('selection');
                 onChangeTab(tab.id);
               }}
-              className={`relative flex-1 py-2 rounded-full flex flex-col items-center justify-center transition-colors duration-200 z-10 select-none ${
+              className={`relative flex-1 py-2.5 px-2 rounded-full flex flex-col items-center justify-center transition-all duration-200 z-10 select-none ${
                 isActive ? 'text-white font-semibold' : 'text-neutral-400 hover:text-white'
               }`}
             >

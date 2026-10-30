@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TaskItem, AccountItem, UserProfile } from '../types';
-import { Plus, Play, Square, Layers, RotateCw, MessageSquareQuote } from 'lucide-react';
+import { Plus, Play, Square, Layers, RotateCw, MessageSquareQuote, CheckCircle2, Clock, AlertTriangle, Filter } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface TasksViewProps {
@@ -20,6 +20,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   onToggleTaskRun,
 }) => {
   const [loadingTaskId, setLoadingTaskId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'running' | 'idle'>('all');
 
   const handleToggleRun = async (e: React.MouseEvent, task: TaskItem) => {
     e.stopPropagation();
@@ -36,6 +37,16 @@ export const TasksView: React.FC<TasksViewProps> = ({
       setLoadingTaskId(null);
     }
   };
+
+  const runningCount = tasks.filter(t => t.status === 'running').length;
+  const totalSent = tasks.reduce((sum, t) => sum + (t.sent || 0), 0);
+  const totalErrors = tasks.reduce((sum, t) => sum + (t.errors || 0), 0);
+
+  const filteredTasks = tasks.filter(task => {
+    if (statusFilter === 'running') return task.status === 'running';
+    if (statusFilter === 'idle') return task.status !== 'running';
+    return true;
+  });
 
   const getStatusBadge = (status: TaskItem['status']) => {
     switch (status) {
@@ -68,13 +79,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-28">
+    <div className="space-y-3.5 pb-28">
       {/* Top Header */}
       <div className="flex items-center justify-between px-1 pt-1">
         <div>
           <h2 className="text-[17px] font-semibold text-white tracking-tight">Задачи рассылки</h2>
           <p className="text-[12px] text-neutral-400">
-            {tasks.length} активных кампаний
+            {tasks.length} сохраненных кампаний
           </p>
         </div>
 
@@ -90,27 +101,102 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </button>
       </div>
 
+      {/* Task Fleet Statistics Bar */}
+      <div className="apple-group-card p-3.5 grid grid-cols-3 gap-2 text-center">
+        <div className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+          <div className="text-[10px] text-neutral-400 font-mono uppercase">Активные</div>
+          <div className="text-base font-bold text-blue-400 font-mono mt-0.5">
+            {runningCount}
+          </div>
+        </div>
+
+        <div className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+          <div className="text-[10px] text-neutral-400 font-mono uppercase">Доставлено</div>
+          <div className="text-base font-bold text-emerald-400 font-mono mt-0.5">
+            {totalSent}
+          </div>
+        </div>
+
+        <div className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+          <div className="text-[10px] text-neutral-400 font-mono uppercase">Ошибок</div>
+          <div className={`text-base font-bold font-mono mt-0.5 ${totalErrors > 0 ? 'text-rose-400' : 'text-neutral-300'}`}>
+            {totalErrors}
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      {tasks.length > 0 && (
+        <div className="flex items-center gap-1.5 bg-[#181920]/80 p-1 rounded-xl border border-white/[0.06]">
+          <button
+            onClick={() => {
+              triggerHaptic('selection');
+              setStatusFilter('all');
+            }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              statusFilter === 'all'
+                ? 'bg-white/15 text-white shadow-sm'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            Все ({tasks.length})
+          </button>
+          <button
+            onClick={() => {
+              triggerHaptic('selection');
+              setStatusFilter('running');
+            }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              statusFilter === 'running'
+                ? 'bg-white/15 text-white shadow-sm'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            В процессе ({runningCount})
+          </button>
+          <button
+            onClick={() => {
+              triggerHaptic('selection');
+              setStatusFilter('idle');
+            }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              statusFilter === 'idle'
+                ? 'bg-white/15 text-white shadow-sm'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            Остановлены ({tasks.length - runningCount})
+          </button>
+        </div>
+      )}
+
       {/* Tasks List */}
       <div className="space-y-2.5">
-        {tasks.length === 0 ? (
+        {filteredTasks.length === 0 ? (
           <div className="apple-group-card p-8 text-center space-y-3">
             <Layers className="w-10 h-10 text-neutral-500 mx-auto" />
-            <h4 className="text-[15px] font-semibold text-white">Задач пока нет</h4>
+            <h4 className="text-[15px] font-semibold text-white">
+              {tasks.length === 0 ? 'Задач пока нет' : 'Нет задач в данной категории'}
+            </h4>
             <p className="text-xs text-neutral-400 max-w-xs mx-auto leading-relaxed">
-              Создайте задачу с текстом рассылки, списком получателей, умной задержкой и автоответчиком.
+              {tasks.length === 0 
+                ? 'Создайте задачу с текстом рассылки, списком получателей, умной задержкой и автоответчиком.'
+                : 'Переключите фильтр для отображения остальных задач.'}
             </p>
-            <button
-              onClick={() => {
-                triggerHaptic('medium');
-                onOpenCreateModal();
-              }}
-              className="mt-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-all active:scale-95"
-            >
-              + Создать первую задачу
-            </button>
+            {tasks.length === 0 && (
+              <button
+                onClick={() => {
+                  triggerHaptic('medium');
+                  onOpenCreateModal();
+                }}
+                className="mt-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-all active:scale-95"
+              >
+                + Создать первую задачу
+              </button>
+            )}
           </div>
         ) : (
-          tasks.map((task) => {
+          filteredTasks.map((task) => {
             const isRunning = task.status === 'running';
             const isToggling = loadingTaskId === task.id;
 
@@ -178,7 +264,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     <span>Отправлено: <strong className="text-white">{task.sent}</strong></span>
                     {task.errors > 0 && <span className="text-rose-400">Ошибок: {task.errors}</span>}
                   </div>
-                  <span>Задержка: {task.delay_min}–{task.delay_max}с</span>
+                  <span>Интервал: {task.delay_min}–{task.delay_max}с</span>
                 </div>
               </div>
             );

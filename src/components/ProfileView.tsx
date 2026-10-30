@@ -1,7 +1,15 @@
 import React from 'react';
 import { UserProfile, AccountItem, TaskItem } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { User as UserIcon, Plus, Users, Shield, Gift, ChevronRight, Settings } from 'lucide-react';
+import { 
+  User as UserIcon, 
+  Plus, 
+  Users, 
+  Gift, 
+  ChevronRight, 
+  Layers, 
+  Smartphone
+} from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface ProfileViewProps {
@@ -11,8 +19,6 @@ interface ProfileViewProps {
   onGoToTab: (tab: 'subscription' | 'accounts' | 'tasks') => void;
   onOpenAddAccount: () => void;
   onOpenReferrals: () => void;
-  onOpenTerms: () => void;
-  onOpenSettings?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -22,8 +28,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onGoToTab,
   onOpenAddAccount,
   onOpenReferrals,
-  onOpenTerms,
-  onOpenSettings,
 }) => {
   const plan = SUBSCRIPTION_PLANS[user.sub_plan] || SUBSCRIPTION_PLANS.free;
   const bonus = user.bonus_messages || 0;
@@ -46,23 +50,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   return (
     <div className="space-y-3.5 pb-28">
-      {/* Profile Card */}
+      {/* Profile Card (Without border or frame around avatar) */}
       <div className="apple-group-card p-4 flex items-center gap-3.5">
-        <div className="w-13 h-13 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 p-0.5 shadow-md flex-shrink-0">
-          <div className="w-full h-full rounded-full bg-[#181920] overflow-hidden flex items-center justify-center">
-            {user.photo_url ? (
-              <img
-                src={user.photo_url}
-                alt={user.first_name || 'User'}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <UserIcon className="w-6 h-6 text-neutral-400" />
-            )}
-          </div>
+        <div className="w-12 h-12 rounded-full overflow-hidden bg-[#181920] flex items-center justify-center flex-shrink-0">
+          {user.photo_url ? (
+            <img
+              src={user.photo_url}
+              alt={user.first_name || 'User'}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <UserIcon className="w-6 h-6 text-neutral-400" />
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -85,7 +87,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Primary Profile Actions (Добавить аккаунт, Реферальная система) */}
+      {/* Primary Actions */}
       <div className="grid grid-cols-2 gap-2.5">
         <button
           onClick={() => {
@@ -116,7 +118,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div className="flex items-center gap-2.5">
             <Gift className="w-4 h-4 text-blue-400" />
             <div className="text-[13px]">
-              <span className="text-white font-medium">Реферальный бонус: </span>
+              <span className="text-white font-medium">Бонус: </span>
               <span className="text-blue-300 font-bold">+{bonus} сообщений</span>
             </div>
           </div>
@@ -146,7 +148,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             }}
             className="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white text-[12px] font-semibold transition-all flex items-center gap-1 active:scale-95"
           >
-            Сменить тариф
+            Тарифы
             <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
           </button>
         </div>
@@ -166,13 +168,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             />
           </div>
           <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-            <span>Действует: {expiresText}</span>
+            <span>Срок: {expiresText}</span>
             {bonus > 0 && <span className="text-blue-400">+{bonus} бонусных</span>}
           </div>
         </div>
       </div>
 
-      {/* Inset Stats Cards */}
+      {/* Stats Cards: Accounts & Tasks */}
       <div className="grid grid-cols-2 gap-2.5">
         <div
           onClick={() => {
@@ -181,7 +183,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           }}
           className="apple-group-card p-3.5 cursor-pointer hover:bg-white/[0.06] transition-all active:scale-95"
         >
-          <div className="text-[11px] font-medium text-neutral-400 uppercase tracking-wider mb-1">Аккаунты</div>
+          <div className="flex items-center justify-between text-[11px] font-medium text-neutral-400 uppercase tracking-wider mb-1">
+            <span>Аккаунты</span>
+            <Smartphone className="w-3.5 h-3.5 text-neutral-400" />
+          </div>
           <div className="text-2xl font-bold text-white font-mono tracking-tight">
             {accounts.length} <span className="text-xs text-neutral-500 font-normal">/ {plan.max_accounts}</span>
           </div>
@@ -194,54 +199,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           }}
           className="apple-group-card p-3.5 cursor-pointer hover:bg-white/[0.06] transition-all active:scale-95"
         >
-          <div className="text-[11px] font-medium text-neutral-400 uppercase tracking-wider mb-1">Задачи</div>
+          <div className="flex items-center justify-between text-[11px] font-medium text-neutral-400 uppercase tracking-wider mb-1">
+            <span>Задачи</span>
+            <Layers className="w-3.5 h-3.5 text-neutral-400" />
+          </div>
           <div className="text-2xl font-bold text-white font-mono tracking-tight">
             {tasks.length}
           </div>
         </div>
-      </div>
-
-      {/* Apple Grouped Options: Settings & Terms */}
-      <div className="apple-group-card divide-y divide-white/[0.06]">
-        {onOpenSettings && (
-          <button
-            onClick={() => {
-              triggerHaptic('light');
-              onOpenSettings();
-            }}
-            className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.03] transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-neutral-700/40 text-neutral-200 flex items-center justify-center">
-                <Settings className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[14px] text-white font-medium">Настройки приложения</div>
-                <div className="text-[11px] text-neutral-400">Haptic, сервер, кэш и параметры</div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-neutral-500" />
-          </button>
-        )}
-
-        <button
-          onClick={() => {
-            triggerHaptic('light');
-            onOpenTerms();
-          }}
-          className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.03] transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
-              <Shield className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-[14px] text-white font-medium">Политика и правила сервиса</div>
-              <div className="text-[11px] text-neutral-400">Правила безопасной рассылки</div>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-neutral-500" />
-        </button>
       </div>
     </div>
   );

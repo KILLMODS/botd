@@ -545,19 +545,21 @@ class BotSyncService {
   }
 
   // --- REAL TELEGRAM STARS PAYMENT ---
-  async createStarsInvoiceLink(userId: number, planKey: PlanConfig['id']): Promise<{ ok: boolean; invoice_link?: string; error?: string }> {
+  async createStarsInvoiceLink(userId: number, planKey: PlanConfig['id'], days: number = 30, customAmount?: number): Promise<{ ok: boolean; invoice_link?: string; error?: string }> {
     const plan = SUBSCRIPTION_PLANS[planKey];
     if (!plan || plan.price_stars <= 0) {
       return { ok: false, error: 'Бесплатный тариф' };
     }
 
+    const calculatedStars = customAmount !== undefined ? customAmount : Math.max(1, Math.round((plan.price_stars / 30) * days));
+
     try {
       const payload = {
-        title: `Подписка ${plan.name}`,
-        description: `Тариф ${plan.name} на 30 дней в TG Broadcaster (лимит ${plan.daily_limit} сообщ/день, до ${plan.max_accounts} акк).`,
-        payload: `sub_${plan.id}_${userId}_${Date.now()}`,
+        title: `Подписка ${plan.name} (${days} дн.)`,
+        description: `Тариф ${plan.name} на ${days} дн. в TG Broadcaster (лимит ${plan.daily_limit} сообщ/день, до ${plan.max_accounts} акк).`,
+        payload: `sub_${plan.id}_${userId}_${days}_${Date.now()}`,
         currency: 'XTR',
-        prices: [{ label: plan.name, amount: plan.price_stars }]
+        prices: [{ label: `${plan.name} (${days} дн.)`, amount: calculatedStars }]
       };
 
       const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
@@ -579,17 +581,19 @@ class BotSyncService {
   }
 
   // --- REAL CRYPTOBOT PAYMENT ---
-  async createCryptoInvoice(userId: number, planKey: PlanConfig['id']): Promise<{ ok: boolean; invoice_url?: string; invoice_id?: number; error?: string }> {
+  async createCryptoInvoice(userId: number, planKey: PlanConfig['id'], days: number = 30, customAmount?: number): Promise<{ ok: boolean; invoice_url?: string; invoice_id?: number; error?: string }> {
     const plan = SUBSCRIPTION_PLANS[planKey];
     if (!plan || plan.price_usd <= 0) {
       return { ok: false, error: 'Бесплатный тариф' };
     }
 
+    const calculatedUsd = customAmount !== undefined ? customAmount : Number(((plan.price_usd / 30) * days).toFixed(2));
+
     try {
       const payload = {
         asset: 'USDT',
-        amount: String(plan.price_usd),
-        description: `Подписка ${plan.name} для пользователя ID ${userId}`,
+        amount: String(calculatedUsd),
+        description: `Подписка ${plan.name} на ${days} дн. для пользователя ID ${userId}`,
         paid_btn_name: 'openBot',
         paid_btn_url: 'https://t.me/CryptoBot'
       };
