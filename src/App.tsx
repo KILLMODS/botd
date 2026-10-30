@@ -15,6 +15,7 @@ import { ConnectionHelpModal } from './components/ConnectionHelpModal';
 import { ReferralModal } from './components/ReferralModal';
 import { TermsModal } from './components/TermsModal';
 import { AdminStatsModal } from './components/AdminStatsModal';
+import { SettingsModal } from './components/SettingsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
@@ -24,6 +25,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isServerConnected, setIsServerConnected] = useState(false);
   const [isConnectionHelpOpen, setIsConnectionHelpOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Pull to refresh
   const [pullDistance, setPullDistance] = useState(0);
@@ -155,6 +157,16 @@ export default function App() {
     setUser(prev => prev ? { ...prev, terms_accepted: 1 } : null);
   };
 
+  const handleResetCache = async () => {
+    const tgUser = getTelegramUser();
+    const uid = tgUser?.id || 1793274038;
+    try {
+      localStorage.removeItem(`tgb_tasks_${uid}`);
+      localStorage.removeItem(`tgb_accounts_${uid}`);
+    } catch {}
+    await loadData(true);
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white">
@@ -192,6 +204,7 @@ export default function App() {
         isConnected={isServerConnected}
         onOpenConnectionHelp={() => setIsConnectionHelpOpen(true)}
         onOpenAdminStats={() => setIsAdminStatsOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -308,6 +321,7 @@ export default function App() {
           onSave={handleSaveTask}
           onToggleRun={handleToggleTaskRun}
           onDelete={handleDeleteTask}
+          onOpenSubscriptions={() => setActiveTab('subscription')}
         />
       )}
 
@@ -317,6 +331,17 @@ export default function App() {
           accounts={accounts}
           onClose={() => setIsCreateTaskOpen(false)}
           onCreate={handleCreateTask}
+          onOpenSubscriptions={() => setActiveTab('subscription')}
+        />
+      )}
+
+      {isSettingsOpen && (
+        <SettingsModal
+          user={user}
+          onClose={() => setIsSettingsOpen(false)}
+          onOpenTerms={() => setIsTermsOpen(true)}
+          onOpenSubscriptions={() => setActiveTab('subscription')}
+          onResetCache={handleResetCache}
         />
       )}
     </div>

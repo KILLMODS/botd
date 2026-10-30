@@ -50,6 +50,9 @@ export interface TaskItem {
   loop: number; // 0 or 1
   media?: string | null;
   chats?: ChatRecipient[];
+  auto_reply?: number; // 0 or 1
+  auto_reply_text?: string;
+  auto_reply_mode?: 'reply_latest' | 'reply_matching';
 }
 
 export interface PlanConfig {

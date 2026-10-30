@@ -1,7 +1,7 @@
 import React from 'react';
 import { UserProfile, AccountItem, TaskItem } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { User as UserIcon, Plus, Users, Shield, Gift } from 'lucide-react';
+import { User as UserIcon, Plus, Users, Shield, Gift, ChevronRight, Settings } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface ProfileViewProps {
@@ -12,6 +12,7 @@ interface ProfileViewProps {
   onOpenAddAccount: () => void;
   onOpenReferrals: () => void;
   onOpenTerms: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -22,6 +23,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onOpenAddAccount,
   onOpenReferrals,
   onOpenTerms,
+  onOpenSettings,
 }) => {
   const plan = SUBSCRIPTION_PLANS[user.sub_plan] || SUBSCRIPTION_PLANS.free;
   const bonus = user.bonus_messages || 0;
@@ -43,48 +45,54 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const limitPercent = Math.min(100, Math.round((sentCount / totalLimit) * 100));
 
   return (
-    <div className="space-y-3 pb-28">
+    <div className="space-y-3.5 pb-28">
       {/* Profile Card */}
-      <div className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-full border border-neutral-800 overflow-hidden bg-neutral-950 flex items-center justify-center flex-shrink-0">
-          {user.photo_url ? (
-            <img
-              src={user.photo_url}
-              alt={user.first_name || 'User'}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
-          ) : (
-            <UserIcon className="w-6 h-6 text-neutral-500" />
-          )}
+      <div className="apple-group-card p-4 flex items-center gap-3.5">
+        <div className="w-13 h-13 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 p-0.5 shadow-md flex-shrink-0">
+          <div className="w-full h-full rounded-full bg-[#181920] overflow-hidden flex items-center justify-center">
+            {user.photo_url ? (
+              <img
+                src={user.photo_url}
+                alt={user.first_name || 'User'}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <UserIcon className="w-6 h-6 text-neutral-400" />
+            )}
+          </div>
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold text-white truncate">
+            <h2 className="text-[17px] font-semibold text-white tracking-tight truncate">
               {user.first_name || 'Пользователь'}
             </h2>
-            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-neutral-300">
+            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+              user.sub_plan === 'premium' ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' :
+              user.sub_plan === 'pro' ? 'bg-blue-400/20 text-blue-300 border border-blue-400/30' :
+              'bg-white/10 text-neutral-300'
+            }`}>
               {plan.name}
             </span>
           </div>
-          <div className="text-xs text-neutral-400 font-mono flex items-center gap-2 mt-0.5">
+          <div className="text-[12px] text-neutral-400 font-mono flex items-center gap-2 mt-0.5">
             <span>ID: {user.user_id}</span>
             {user.username && <span>@{user.username}</span>}
           </div>
         </div>
       </div>
 
-      {/* Primary Profile Actions (Requested: Добавить аккаунт, Реферальная система) */}
-      <div className="grid grid-cols-2 gap-2">
+      {/* Primary Profile Actions (Добавить аккаунт, Реферальная система) */}
+      <div className="grid grid-cols-2 gap-2.5">
         <button
           onClick={() => {
             triggerHaptic('medium');
             onOpenAddAccount();
           }}
-          className="py-3 px-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 active:scale-[0.98]"
+          className="py-3 px-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[13px] flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
         >
           <Plus className="w-4 h-4" />
           <span>Добавить аккаунт</span>
@@ -95,21 +103,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             triggerHaptic('medium');
             onOpenReferrals();
           }}
-          className="py-3 px-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/20 active:scale-[0.98]"
+          className="py-3 px-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-[13px] flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
         >
           <Users className="w-4 h-4" />
-          <span>Реферальная система</span>
+          <span>Рефералы</span>
         </button>
       </div>
 
       {/* Bonus Messages Banner if active */}
       {bonus > 0 && (
-        <div className="bg-gradient-to-r from-blue-950/40 via-purple-950/30 to-blue-950/40 border border-blue-500/30 rounded-2xl p-3 flex items-center justify-between">
+        <div className="apple-group-card p-3.5 flex items-center justify-between border-blue-500/20 bg-blue-950/20">
           <div className="flex items-center gap-2.5">
             <Gift className="w-4 h-4 text-blue-400" />
-            <div className="text-xs">
+            <div className="text-[13px]">
               <span className="text-white font-medium">Реферальный бонус: </span>
-              <span className="text-blue-300">+{bonus} сообщений</span>
+              <span className="text-blue-300 font-bold">+{bonus} сообщений</span>
             </div>
           </div>
           <button
@@ -117,63 +125,64 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               triggerHaptic('light');
               onOpenReferrals();
             }}
-            className="text-[11px] font-medium text-blue-400 hover:text-blue-300"
+            className="text-[12px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-0.5"
           >
-            Подробнее &rarr;
+            Инфо <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
       {/* Plan Details & Limits Card */}
-      <div className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 space-y-3">
+      <div className="apple-group-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] text-neutral-400">Текущий тариф</div>
-            <div className="text-sm font-semibold text-white">{plan.name}</div>
+            <div className="text-[11px] font-medium text-neutral-400 uppercase tracking-wider">Текущий тариф</div>
+            <div className="text-[15px] font-semibold text-white tracking-tight">{plan.name}</div>
           </div>
           <button
             onClick={() => {
               triggerHaptic('medium');
               onGoToTab('subscription');
             }}
-            className="px-3 py-1.5 rounded-lg bg-white hover:bg-neutral-200 text-black text-xs font-medium transition-colors"
+            className="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white text-[12px] font-semibold transition-all flex items-center gap-1 active:scale-95"
           >
             Сменить тариф
+            <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
           </button>
         </div>
 
         {/* Progress Bar */}
         <div className="space-y-1.5 pt-1">
-          <div className="flex justify-between text-xs">
+          <div className="flex justify-between text-[12px]">
             <span className="text-neutral-400">Отправлено сегодня:</span>
-            <span className="font-mono text-white">
+            <span className="font-mono text-white font-medium">
               {sentCount} <span className="text-neutral-500">/ {totalLimit}</span>
             </span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+          <div className="w-full h-2 rounded-full bg-black/40 border border-white/[0.06] overflow-hidden">
             <div
-              className="h-full bg-white rounded-full transition-all duration-300"
+              className="h-full bg-blue-500 rounded-full transition-all duration-300"
               style={{ width: `${limitPercent}%` }}
             />
           </div>
-          <div className="flex items-center justify-between text-[11px] text-neutral-500 font-mono">
+          <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono">
             <span>Действует: {expiresText}</span>
             {bonus > 0 && <span className="text-blue-400">+{bonus} бонусных</span>}
           </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-2">
+      {/* Inset Stats Cards */}
+      <div className="grid grid-cols-2 gap-2.5">
         <div
           onClick={() => {
             triggerHaptic('light');
             onGoToTab('accounts');
           }}
-          className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-3.5 cursor-pointer hover:border-neutral-700 transition-colors"
+          className="apple-group-card p-3.5 cursor-pointer hover:bg-white/[0.06] transition-all active:scale-95"
         >
-          <div className="text-[11px] text-neutral-400 mb-1">Аккаунты</div>
-          <div className="text-xl font-semibold text-white font-mono">
+          <div className="text-[11px] font-medium text-neutral-400 uppercase tracking-wider mb-1">Аккаунты</div>
+          <div className="text-2xl font-bold text-white font-mono tracking-tight">
             {accounts.length} <span className="text-xs text-neutral-500 font-normal">/ {plan.max_accounts}</span>
           </div>
         </div>
@@ -183,26 +192,57 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             triggerHaptic('light');
             onGoToTab('tasks');
           }}
-          className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-3.5 cursor-pointer hover:border-neutral-700 transition-colors"
+          className="apple-group-card p-3.5 cursor-pointer hover:bg-white/[0.06] transition-all active:scale-95"
         >
-          <div className="text-[11px] text-neutral-400 mb-1">Задачи</div>
-          <div className="text-xl font-semibold text-white font-mono">
+          <div className="text-[11px] font-medium text-neutral-400 uppercase tracking-wider mb-1">Задачи</div>
+          <div className="text-2xl font-bold text-white font-mono tracking-tight">
             {tasks.length}
           </div>
         </div>
       </div>
 
-      {/* Terms & Privacy button in profile */}
-      <button
-        onClick={() => {
-          triggerHaptic('light');
-          onOpenTerms();
-        }}
-        className="w-full py-2.5 px-3 rounded-xl bg-neutral-950 border border-neutral-800/80 text-[11px] text-neutral-400 hover:text-white flex items-center justify-center gap-1.5 transition-colors"
-      >
-        <Shield className="w-3.5 h-3.5 text-neutral-500" />
-        <span>Политика конфиденциальности и условия сервиса</span>
-      </button>
+      {/* Apple Grouped Options: Settings & Terms */}
+      <div className="apple-group-card divide-y divide-white/[0.06]">
+        {onOpenSettings && (
+          <button
+            onClick={() => {
+              triggerHaptic('light');
+              onOpenSettings();
+            }}
+            className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.03] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg bg-neutral-700/40 text-neutral-200 flex items-center justify-center">
+                <Settings className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-[14px] text-white font-medium">Настройки приложения</div>
+                <div className="text-[11px] text-neutral-400">Haptic, сервер, кэш и параметры</div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-neutral-500" />
+          </button>
+        )}
+
+        <button
+          onClick={() => {
+            triggerHaptic('light');
+            onOpenTerms();
+          }}
+          className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.03] transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
+              <Shield className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-[14px] text-white font-medium">Политика и правила сервиса</div>
+              <div className="text-[11px] text-neutral-400">Правила безопасной рассылки</div>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-neutral-500" />
+        </button>
+      </div>
     </div>
   );
 };

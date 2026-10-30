@@ -199,6 +199,12 @@ def db_init():
             c.execute("ALTER TABLE tasks ADD COLUMN user_id INTEGER DEFAULT 0")
         if "target_accs" not in task_cols:
             c.execute("ALTER TABLE tasks ADD COLUMN target_accs TEXT DEFAULT 'all'")
+        if "auto_reply" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN auto_reply INTEGER DEFAULT 0")
+        if "auto_reply_text" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN auto_reply_text TEXT DEFAULT ''")
+        if "auto_reply_mode" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN auto_reply_mode TEXT DEFAULT 'reply_latest'")
 
         # Инициализация дефолтных настроек
         c.execute("INSERT OR IGNORE INTO bot_settings (key, value) VALUES ('required_channel', ?)", (REQUIRED_CHANNEL,))
@@ -385,11 +391,11 @@ def db_delete_account(phone: str, user_id: int):
     with db_conn() as c:
         c.execute("DELETE FROM accounts WHERE phone=? AND user_id=?", (phone, user_id))
 
-def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, chats: list, delay_min: int, delay_max: int, loop=False, media=None):
+def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, chats: list, delay_min: int, delay_max: int, loop=False, media=None, auto_reply=0, auto_reply_text="", auto_reply_mode="reply_latest"):
     with db_conn() as c:
         cur = c.execute(
-            "INSERT INTO tasks (user_id, account_id, target_accs, text, delay_min, delay_max, loop, media) VALUES (?,?,?,?,?,?,?,?)",
-            (user_id, account_id, target_accs, text, delay_min, delay_max, 1 if loop else 0, media)
+            "INSERT INTO tasks (user_id, account_id, target_accs, text, delay_min, delay_max, loop, media, auto_reply, auto_reply_text, auto_reply_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (user_id, account_id, target_accs, text, delay_min, delay_max, 1 if loop else 0, media, 1 if auto_reply else 0, auto_reply_text or "", auto_reply_mode or "reply_latest")
         )
         task_id = cur.lastrowid
         for ch in chats:
@@ -784,11 +790,17 @@ def parse_chat_links(links: list[str]) -> list[dict]:
             result.append({"id": 0, "username": clean_target, "title": clean_target})
     return result
 
-async def _send_one(client, target, text, media):
+async def _send_one(client, target, text, media, reply_to=None):
     if media and os.path.exists(media):
-        await client.send_file(target, media, caption=text)
+        if reply_to:
+            await client.send_file(target, media, caption=text, reply_to=reply_to)
+        else:
+            await client.send_file(target, media, caption=text)
     else:
-        await client.send_message(target, text)
+        if reply_to:
+            await client.send_message(target, text, reply_to=reply_to)
+        else:
+            await client.send_message(target, text)
 
 async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_min: int, delay_max: int, done_cb):
     total_sent = 0
@@ -797,6 +809,14 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
     try:
         task = db_get_task(task_id)
         if not task: return
+
+        # Проверка прав на автоответчик (только тарифы Pro и Premium+)
+        user_info = db_get_or_create_user(user_id)
+        user_plan = user_info.get("sub_plan", "free")
+        is_pro_or_prem = user_plan in ["pro", "premium"] or user_id in ADMIN_IDS
+        can_auto_reply = bool(task.get("auto_reply", 0)) and is_pro_or_prem
+        custom_reply_text = (task.get("auto_reply_text") or "").strip()
+        effective_text = custom_reply_text if (can_auto_reply and custom_reply_text) else text
 
         target_accs = task.get("target_accs", "all")
         user_accs = [a for a in db_get_user_accounts(user_id) if a["status"] == "active"]
@@ -861,8 +881,20 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
                 client_index += 1
 
                 target = chat.get("username") or chat["chat_id"]
+                reply_msg_id = None
+
+                # Автоответчик: берёт последнее входящее сообщение из чата и отвечает на него
+                if can_auto_reply:
+                    try:
+                        latest_msgs = await client.get_messages(target, limit=1)
+                        if latest_msgs and len(latest_msgs) > 0 and latest_msgs[0].id:
+                            reply_msg_id = latest_msgs[0].id
+                            log.info(f"[{task_id}] 🤖 Автоответчик: отвечаем на msg_id={reply_msg_id} в {target}")
+                    except Exception as ar_ex:
+                        log.debug(f"[{task_id}] Автоответчик: не удалось прочитать последнее сообщение в {target}: {ar_ex}")
+
                 try:
-                    await _send_one(client, target, text, media)
+                    await _send_one(client, target, effective_text, media, reply_to=reply_msg_id)
                     total_sent += 1
                     db_inc_sent(task_id)
                     db_inc_user_sent(user_id)
@@ -1118,11 +1150,13 @@ def task_detail_text(task: dict) -> str:
     acc_str = "Все активные аккаунты" if target == "all" else f"ID: {target}"
     live = task["id"] in running_tasks
     media_str = "Прикреплено фото" if task.get("media") else "Нет"
+    ar_str = "🟢 Включен (ответ на сообщения)" if task.get("auto_reply") else "⚪ Выключен"
     return (
         f"📊 **Информация о задаче #{task['id']}**\n\n"
         f"📱 Аккаунты: `{acc_str}`\n"
         f"📌 Статус: `{task['status']}`\n"
         f"🔁 Режим: {'Бесконечный цикл' if task['loop'] else 'Одиночный'}\n"
+        f"🤖 Автоответчик: {ar_str}\n"
         f"🖼 Медиа: {media_str}\n\n"
         f"📈 Отправлено: `{task['sent']}` | ❌ Ошибок: `{task['errors']}`\n"
         f"⏱ Интервал задержки: `{task['delay_min']}–{task['delay_max']} сек`\n"
@@ -1695,25 +1729,49 @@ def register_handlers(bot: TelegramClient):
                 )
 
         elif data == "delay_default":
-            st = states.get(uid)
-            if not st or st.get("state") != "task_delay": return
+            try:
+                await e.answer("⚡ Создаём задачу с параметрами по умолчанию...")
+            except Exception:
+                pass
+            st = states.get(uid, {})
             u = db_get_or_create_user(uid)
-            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
-            d_min = max(10, plan["min_delay"])
+            plan = SUBSCRIPTION_PLANS.get(u.get("sub_plan", "free"), SUBSCRIPTION_PLANS["free"])
+            d_min = max(10, plan.get("min_delay", 15))
+            d_max = max(30, d_min + 15)
 
-            task_id = db_create_task(
-                uid, 0, st["target_accs"], st["text"], st["chats"], d_min, 30,
-                loop=False, media=st.get("media")
-            )
-            states.pop(uid, None)
-            await e.edit(
-                f"✅ **Задача #{task_id} успешно создана!**\n\n"
-                f"📊 Получателей: `{len(st['chats'])}`\n"
-                f"📷 Медиа: `{'Есть' if st.get('media') else 'Нет'}`\n"
-                f"⏱ Задержка: `{d_min}–30 сек`\n"
-                f"🎯 Аккаунты: `{st['target_accs']}`",
-                buttons=task_action_keyboard(task_id)
-            )
+            target_accs = st.get("target_accs", "all")
+            text = st.get("text") or "Рекламное сообщение"
+            chats = st.get("chats") or []
+            media = st.get("media")
+
+            if not chats:
+                await e.edit(
+                    "⚠️ **Список получателей не найден.**\n\nПожалуйста, начните создание задачи заново:",
+                    buttons=[[styled_btn("➕ Создать задачу", b"new_task", style="primary")], [styled_btn("🔙 Главное меню", b"main_menu")]]
+                )
+                states.pop(uid, None)
+                return
+
+            try:
+                task_id = db_create_task(
+                    uid, 0, target_accs, text, chats, d_min, d_max,
+                    loop=False, media=media,
+                    auto_reply=int(st.get("auto_reply", 0)),
+                    auto_reply_text=st.get("auto_reply_text", "")
+                )
+                states.pop(uid, None)
+                await e.edit(
+                    f"✅ **Задача #{task_id} успешно создана!**\n\n"
+                    f"📊 Получателей: `{len(chats)}`\n"
+                    f"📷 Медиа: `{'Есть' if media else 'Нет'}`\n"
+                    f"⏱ Задержка: `{d_min}–{d_max} сек` (по умолчанию)\n"
+                    f"🎯 Аккаунты: `{target_accs}`",
+                    buttons=task_action_keyboard(task_id)
+                )
+            except Exception as ex:
+                log.error(f"Ошибка создания задачи в delay_default: {ex}")
+                await e.respond(f"❌ Ошибка создания задачи: `{ex}`", buttons=main_menu_keyboard(uid))
+                states.pop(uid, None)
 
         # ── ОПЛАТА ──
         elif data == "buy_crypto":
@@ -1967,34 +2025,59 @@ def register_handlers(bot: TelegramClient):
 
         elif step == "task_delay":
             u = db_get_or_create_user(uid)
-            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
-            d_min, d_max = max(10, plan["min_delay"]), 30
+            plan = SUBSCRIPTION_PLANS.get(u.get("sub_plan", "free"), SUBSCRIPTION_PLANS["free"])
+            min_plan_delay = plan.get("min_delay", 15)
+            d_min = max(10, min_plan_delay)
+            d_max = max(30, d_min + 15)
 
-            if txt:
-                parts = txt.split()
-                try:
-                    user_dmin = int(parts[0])
-                    if user_dmin < plan["min_delay"]:
-                        await e.respond(f"⚠️ Минимальная задержка для вашего тарифа составляет {plan['min_delay']} сек.")
+            clean_txt = (txt or "").strip().lower()
+            if clean_txt in ["по умолчанию", "дефолт", "default", "ок", "ok", "да"]:
+                d_min = max(10, min_plan_delay)
+                d_max = max(30, d_min + 15)
+            elif txt:
+                nums = re.findall(r"\d+", txt)
+                if nums:
+                    val1 = int(nums[0])
+                    if val1 < min_plan_delay:
+                        await e.respond(f"⚠️ Минимальная задержка для вашего тарифа составляет {min_plan_delay} сек.\nВведите число от {min_plan_delay} сек или нажмите кнопку «По умолчанию»:")
                         return
-                    d_min = user_dmin
-                    d_max = int(parts[1]) if len(parts) > 1 else d_min + 15
-                except (ValueError, IndexError):
-                    pass
+                    d_min = val1
+                    if len(nums) > 1:
+                        val2 = int(nums[1])
+                        d_max = max(d_min, val2)
+                    else:
+                        d_max = d_min + 15
 
-            task_id = db_create_task(
-                uid, 0, st["target_accs"], st["text"], st["chats"], d_min, d_max,
-                loop=False, media=st.get("media")
-            )
-            states.pop(uid, None)
-            await e.respond(
-                f"✅ **Задача #{task_id} успешно создана!**\n\n"
-                f"📊 Получателей: `{len(st['chats'])}`\n"
-                f"📷 Медиа: `{'Есть' if st.get('media') else 'Нет'}`\n"
-                f"⏱ Задержка: `{d_min}–{d_max} сек`\n"
-                f"🎯 Аккаунты: `{st['target_accs']}`",
-                buttons=task_action_keyboard(task_id)
-            )
+            target_accs = st.get("target_accs", "all")
+            text = st.get("text") or "Рекламное сообщение"
+            chats = st.get("chats") or []
+            media = st.get("media")
+
+            if not chats:
+                await e.respond("⚠️ Список получателей не найден. Пожалуйста, начните создание задачи заново.", buttons=main_menu_keyboard(uid))
+                states.pop(uid, None)
+                return
+
+            try:
+                task_id = db_create_task(
+                    uid, 0, target_accs, text, chats, d_min, d_max,
+                    loop=False, media=media,
+                    auto_reply=int(st.get("auto_reply", 0)),
+                    auto_reply_text=st.get("auto_reply_text", "")
+                )
+                states.pop(uid, None)
+                await e.respond(
+                    f"✅ **Задача #{task_id} успешно создана!**\n\n"
+                    f"📊 Получателей: `{len(chats)}`\n"
+                    f"📷 Медиа: `{'Есть' if media else 'Нет'}`\n"
+                    f"⏱ Задержка: `{d_min}–{d_max} сек`\n"
+                    f"🎯 Аккаунты: `{target_accs}`",
+                    buttons=task_action_keyboard(task_id)
+                )
+            except Exception as ex:
+                log.error(f"Ошибка создания задачи в task_delay: {ex}")
+                await e.respond(f"❌ Ошибка создания задачи: `{ex}`", buttons=main_menu_keyboard(uid))
+                states.pop(uid, None)
 
 # ─────────────────────────────────────────────────────
 #  API СЕРВЕР ДЛЯ TELEGRAM MINI APP (VERCEL SYNC)
@@ -2145,10 +2228,13 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
             data.get("target_accs", "all"),
             data.get("text", ""),
             chats,
-            data.get("delay_min", 10),
-            data.get("delay_max", 30),
+            int(data.get("delay_min", 10)),
+            int(data.get("delay_max", 30)),
             loop=bool(data.get("loop")),
-            media=data.get("media")
+            media=data.get("media"),
+            auto_reply=1 if data.get("auto_reply") else 0,
+            auto_reply_text=data.get("auto_reply_text", ""),
+            auto_reply_mode=data.get("auto_reply_mode", "reply_latest")
         )
         task = db_get_task(tid)
         task["chats"] = chats
@@ -2172,6 +2258,12 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
                 c.execute("UPDATE tasks SET loop=? WHERE id=?", (1 if data["loop"] else 0, tid))
             if "target_accs" in data:
                 c.execute("UPDATE tasks SET target_accs=? WHERE id=?", (data["target_accs"], tid))
+            if "auto_reply" in data:
+                c.execute("UPDATE tasks SET auto_reply=? WHERE id=?", (1 if data["auto_reply"] else 0, tid))
+            if "auto_reply_text" in data:
+                c.execute("UPDATE tasks SET auto_reply_text=? WHERE id=?", (data["auto_reply_text"], tid))
+            if "auto_reply_mode" in data:
+                c.execute("UPDATE tasks SET auto_reply_mode=? WHERE id=?", (data["auto_reply_mode"], tid))
         task = db_get_task(tid)
         return web.json_response(task)
 

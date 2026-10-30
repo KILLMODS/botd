@@ -40,6 +40,7 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
       'До 5 Telegram аккаунтов',
       '5 000 сообщений / день',
       'Быстрая задержка от 5 сек',
+      'Умный автоответчик в чатах',
       'Медиа-вложения (фото/видео)',
       'Бесконечный режим (Loop)',
       '+100 сообщений за реферала'
@@ -59,6 +60,7 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
       'До 15 Telegram аккаунтов',
       '10 000 сообщений / день',
       'Турбо-задержка от 1 сек',
+      'Умный автоответчик в чатах',
       'Бесконечный автоповтор по кругу',
       '+230 сообщений за реферала',
       'Приоритетный обход FloodWait'
@@ -451,7 +453,10 @@ class BotSyncService {
       errors: 0,
       loop: task.loop ? 1 : 0,
       media: task.media || null,
-      chats: task.chats || []
+      chats: task.chats || [],
+      auto_reply: task.auto_reply ? 1 : 0,
+      auto_reply_text: task.auto_reply_text || '',
+      auto_reply_mode: task.auto_reply_mode || 'reply_latest'
     };
     tasks.unshift(newTask);
     localStorage.setItem(key, JSON.stringify(tasks));
