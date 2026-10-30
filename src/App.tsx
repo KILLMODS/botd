@@ -46,7 +46,6 @@ export default function App() {
       setAccounts(accsData);
       setTasks(tasksData);
 
-      // Keep selectedTask updated if modal is open
       if (selectedTask) {
         const refreshed = tasksData.find(t => t.id === selectedTask.id);
         if (refreshed) setSelectedTask(refreshed);
@@ -58,6 +57,10 @@ export default function App() {
 
   useEffect(() => {
     loadData(true);
+    const interval = setInterval(() => {
+      loadData(false);
+    }, 8000);
+    return () => clearInterval(interval);
   }, [loadData]);
 
   // Handlers for Accounts
@@ -68,7 +71,7 @@ export default function App() {
   };
 
   const handleAccountAdded = (newAcc: AccountItem) => {
-    setAccounts(prev => [...prev, newAcc]);
+    setAccounts(prev => [...prev.filter(a => a.id !== newAcc.id), newAcc]);
   };
 
   // Handlers for Tasks
@@ -103,23 +106,19 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-[#090a0f]">
-        <div className="apple-glass-card rounded-3xl p-8 text-center space-y-3 max-w-xs w-full">
-          <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 mx-auto animate-spin">
-            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full" />
-          </div>
-          <div className="text-sm font-bold text-white">Загрузка Mini App...</div>
-          <div className="text-xs text-slate-400">Инициализация профиля Telegram</div>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white">
+        <div className="bg-neutral-900 border border-white/20 rounded-3xl p-8 text-center space-y-3 max-w-xs w-full">
+          <div className="w-10 h-10 rounded-full border-2 border-white border-t-transparent animate-spin mx-auto" />
+          <div className="text-sm font-bold text-white">Загрузка...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col relative selection:bg-blue-500/30">
-      {/* Decorative ambient Apple glows in background */}
-      <div className="fixed top-[-10%] left-[-10%] w-[45vw] h-[45vw] rounded-full bg-blue-600/15 blur-[120px] pointer-events-none -z-10" />
-      <div className="fixed bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-purple-600/15 blur-[130px] pointer-events-none -z-10" />
+    <div className="min-h-screen bg-black text-white flex flex-col relative selection:bg-white selection:text-black">
+      {/* Subtle monochrome vignette */}
+      <div className="fixed top-0 left-0 right-0 h-40 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none -z-10" />
 
       {/* Top Header */}
       <Header
@@ -171,7 +170,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Bottom Floating Navigation Dock */}
+      {/* Bottom Floating Navigation Dock with Sliding Indicator */}
       <Navbar
         activeTab={activeTab}
         onChangeTab={(tab) => setActiveTab(tab)}

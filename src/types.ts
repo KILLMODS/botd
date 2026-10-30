@@ -4,6 +4,7 @@ export interface UserProfile {
   user_id: number;
   username?: string;
   first_name?: string;
+  photo_url?: string;
   sub_plan: PlanTier;
   sub_expires_at: number; // Unix timestamp seconds
   daily_sent: number;
@@ -55,7 +56,6 @@ export interface PlanConfig {
   price_stars: number;
   price_usd: number;
   popular?: boolean;
-  accentColor: string;
   badge: string;
   features: string[];
 }

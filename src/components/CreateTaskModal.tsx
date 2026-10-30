@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TaskItem, AccountItem, UserProfile } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { X, Send, RotateCw, Clock, Users, Image as ImageIcon, Plus } from 'lucide-react';
+import { X, Clock, Users, Image as ImageIcon, Plus } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface CreateTaskModalProps {
@@ -38,12 +38,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
     const lines = linksText.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) {
-      setError('Укажите хотя бы один чат, группу или канал (каждый с новой строки)');
+      setError('Укажите хотя бы одного получателя (каждый с новой строки)');
       return;
     }
 
     if (delayMin < plan.min_delay) {
-      setError(`Минимальная задержка для вашего тарифа (${plan.name}) составляет ${plan.min_delay} сек.`);
+      setError(`Минимальная задержка для тарифа ${plan.name} составляет ${plan.min_delay} сек.`);
       return;
     }
 
@@ -86,17 +86,17 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-      <div className="apple-glass-card rounded-3xl max-w-md w-full p-5 sm:p-6 relative shadow-2xl border-white/20 my-auto max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+      <div className="bg-neutral-900 border border-white/20 rounded-3xl max-w-md w-full p-5 sm:p-6 relative shadow-2xl my-auto max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
-              <Plus className="w-4 h-4" />
+            <span className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
+              <Plus className="w-4 h-4 stroke-[3]" />
             </span>
             <div>
               <h3 className="text-base font-bold text-white">Новая задача рассылки</h3>
-              <p className="text-xs text-slate-400">Синхронизируется с ботом</p>
+              <p className="text-xs text-neutral-400">Настройка параметров</p>
             </div>
           </div>
 
@@ -105,14 +105,14 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               triggerHaptic('light');
               onClose();
             }}
-            className="w-8 h-8 rounded-full apple-glass-button flex items-center justify-center text-slate-400 hover:text-white"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-neutral-400 hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {error && (
-          <div className="mt-3 p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">
+          <div className="mt-3 p-3 rounded-2xl bg-neutral-800 border border-white/20 text-white text-xs font-mono">
             {error}
           </div>
         )}
@@ -121,15 +121,15 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 py-3 overflow-y-auto pr-1">
           {/* Message Text */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">
+            <label className="text-xs font-semibold text-neutral-300">
               Текст сообщения:
             </label>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={3}
-              placeholder="Здравствуйте! Предлагаем вашему вниманию..."
-              className="w-full px-3 py-2.5 rounded-2xl apple-glass-input text-white text-xs outline-none resize-none leading-relaxed"
+              placeholder="Введите текст рассылки..."
+              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs outline-none resize-none leading-relaxed focus:border-white"
               required
             />
           </div>
@@ -140,56 +140,53 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               triggerHaptic('selection');
               setHasMedia(!hasMedia);
             }}
-            className="apple-glass rounded-2xl p-3 flex items-center justify-between cursor-pointer border-white/10 hover:border-white/20 transition-colors"
+            className="bg-black/50 border border-white/10 rounded-2xl p-3 flex items-center justify-between cursor-pointer hover:border-white/20 transition-colors"
           >
             <div className="flex items-center gap-2.5">
-              <ImageIcon className={`w-4 h-4 ${hasMedia ? 'text-purple-400' : 'text-slate-400'}`} />
+              <ImageIcon className="w-4 h-4 text-white" />
               <div>
-                <div className="text-xs font-semibold text-white">Прикрепить медиа (фото)</div>
-                <div className="text-[11px] text-slate-400">Отправка фото с подписью</div>
+                <div className="text-xs font-semibold text-white">Прикрепить фото</div>
+                <div className="text-[11px] text-neutral-400">Отправка с фотографией</div>
               </div>
             </div>
             <input
               type="checkbox"
               checked={hasMedia}
               onChange={() => {}}
-              className="w-4 h-4 rounded text-blue-500"
+              className="w-4 h-4 rounded text-black accent-white"
             />
           </div>
 
           {/* Recipients / Chats */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">
-              Список получателей (по одному на строку):
+            <label className="text-xs font-semibold text-neutral-300">
+              Получатели (по одному на строку):
             </label>
             <textarea
               value={linksText}
               onChange={(e) => setLinksText(e.target.value)}
               rows={3}
-              placeholder={'@channel_one\nhttps://t.me/crypto_chat\n@tg_promogroup'}
-              className="w-full px-3 py-2.5 rounded-2xl apple-glass-input text-white text-xs font-mono outline-none resize-none"
+              placeholder={'@username\nhttps://t.me/chat\n@group_ad'}
+              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs font-mono outline-none resize-none focus:border-white"
               required
             />
-            <p className="text-[10px] text-slate-400">
-              Поддерживаются ссылки вида: @username, https://t.me/chat, или числовые ID.
-            </p>
           </div>
 
           {/* Delay Range */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-300 font-semibold flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-blue-400" />
-                Интервал задержки (мин – макс):
+              <span className="text-neutral-300 font-semibold flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-white" />
+                Задержка (сек):
               </span>
-              <span className="text-slate-400 font-mono text-[11px]">
-                {delayMin} – {delayMax} сек
+              <span className="text-neutral-400 font-mono text-[11px]">
+                {delayMin} – {delayMax}с
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <div className="apple-glass rounded-2xl p-2 border-white/10">
-                <span className="text-[10px] text-slate-400 block mb-1">Мин (сек):</span>
+              <div className="bg-black/50 border border-white/10 rounded-2xl p-2">
+                <span className="text-[10px] text-neutral-400 block mb-1">Мин:</span>
                 <input
                   type="number"
                   min={plan.min_delay}
@@ -199,8 +196,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   className="w-full bg-transparent text-white font-mono text-xs outline-none"
                 />
               </div>
-              <div className="apple-glass rounded-2xl p-2 border-white/10">
-                <span className="text-[10px] text-slate-400 block mb-1">Макс (сек):</span>
+              <div className="bg-black/50 border border-white/10 rounded-2xl p-2">
+                <span className="text-[10px] text-neutral-400 block mb-1">Макс:</span>
                 <input
                   type="number"
                   min={delayMin}
@@ -215,55 +212,52 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
           {/* Target Accounts */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-indigo-400" />
-              Отправлять через:
+            <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-white" />
+              Отправлять с аккаунтов:
             </label>
             <select
               value={targetAccs}
               onChange={(e) => setTargetAccs(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-2xl apple-glass-input text-white text-xs outline-none"
+              className="w-full px-3 py-2.5 rounded-2xl bg-black border border-white/15 text-white text-xs outline-none focus:border-white"
             >
-              <option value="all" className="bg-[#11131f] text-white">
-                🌐 Все активные аккаунты ({accounts.length})
+              <option value="all" className="bg-neutral-900 text-white">
+                Все активные аккаунты ({accounts.length})
               </option>
               {accounts.map((acc) => (
-                <option key={acc.id} value={String(acc.id)} className="bg-[#11131f] text-white">
+                <option key={acc.id} value={String(acc.id)} className="bg-neutral-900 text-white">
                   📱 {acc.phone} (ID: {acc.id})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Loop Mode Toggle */}
+          {/* Loop Mode */}
           <div
             onClick={() => {
               triggerHaptic('selection');
               setIsLoop(!isLoop);
             }}
-            className="apple-glass rounded-2xl p-3 flex items-center justify-between cursor-pointer border-white/10 hover:border-white/20 transition-colors"
+            className="bg-black/50 border border-white/10 rounded-2xl p-3 flex items-center justify-between cursor-pointer hover:border-white/20 transition-colors"
           >
-            <div className="flex items-center gap-2.5">
-              <RotateCw className={`w-4 h-4 ${isLoop ? 'text-indigo-400' : 'text-slate-400'}`} />
-              <div>
-                <div className="text-xs font-semibold text-white">Бесконечный автоповтор (Loop)</div>
-                <div className="text-[11px] text-slate-400">Повторять рассылку по кругу после завершения</div>
-              </div>
+            <div>
+              <div className="text-xs font-semibold text-white">Бесконечный цикл (Loop)</div>
+              <div className="text-[11px] text-neutral-400">Повторять рассылку по кругу</div>
             </div>
             <input
               type="checkbox"
               checked={isLoop}
               onChange={() => {}}
-              className="w-4 h-4 rounded text-indigo-500"
+              className="w-4 h-4 rounded text-black accent-white"
             />
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-500/20 hover:brightness-110 active:scale-95 transition-all mt-2"
+            className="w-full py-3.5 px-4 rounded-2xl bg-white text-black font-bold text-sm hover:bg-neutral-200 active:scale-95 transition-all mt-2 shadow-lg"
           >
-            {isLoading ? 'Создание задачи...' : '✅ Создать и синхронизировать'}
+            {isLoading ? 'Создание...' : 'Создать задачу'}
           </button>
         </form>
       </div>
