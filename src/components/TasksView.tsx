@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TaskItem, AccountItem, UserProfile } from '../types';
-import { Plus, Send, Play, Square, RotateCw, Image as ImageIcon, ChevronRight } from 'lucide-react';
+import { Plus, ListTodo, Play, Square, RotateCw, Image as ImageIcon, ChevronRight } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface TasksViewProps {
@@ -73,7 +73,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
       <div className="bg-neutral-900/70 border border-white/15 rounded-3xl p-4 flex items-center justify-between backdrop-blur-2xl">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
-            <Send className="w-5 h-5" />
+            <ListTodo className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-sm font-bold text-white">Задачи рассылки</h2>
@@ -106,7 +106,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
         {tasks.length === 0 ? (
           <div className="bg-neutral-900/60 border border-white/10 rounded-3xl p-8 text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 mx-auto">
-              <Send className="w-6 h-6" />
+              <ListTodo className="w-6 h-6" />
             </div>
             <div>
               <h4 className="text-sm font-semibold text-white">Задач пока нет</h4>

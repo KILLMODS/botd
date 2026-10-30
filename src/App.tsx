@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { UserProfile, AccountItem, TaskItem } from './types';
 import { botApi } from './services/api';
-import { initTelegramApp, getTelegramUser } from './services/telegram';
+import { initTelegramApp, getTelegramUser, triggerHaptic } from './services/telegram';
 import { Header } from './components/Header';
 import { Navbar, TabType } from './components/Navbar';
 import { ProfileView } from './components/ProfileView';
@@ -18,6 +18,11 @@ export default function App() {
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Pull to refresh
+  const [pullDistance, setPullDistance] = useState(0);
+  const touchStartY = useRef(0);
+  const isPullingRef = useRef(false);
 
   // Modals
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
@@ -59,9 +64,39 @@ export default function App() {
     loadData(true);
     const interval = setInterval(() => {
       loadData(false);
-    }, 8000);
+    }, 7000);
     return () => clearInterval(interval);
   }, [loadData]);
+
+  // Touch handlers for Pull-to-Refresh
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY <= 5) {
+      touchStartY.current = e.touches[0].clientY;
+      isPullingRef.current = true;
+    } else {
+      isPullingRef.current = false;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPullingRef.current || window.scrollY > 5) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+    if (diff > 0) {
+      const distance = Math.min(80, Math.pow(diff, 0.85));
+      setPullDistance(distance);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (isPullingRef.current && pullDistance > 45) {
+      triggerHaptic('medium');
+      setPullDistance(45);
+      await loadData(true);
+    }
+    setPullDistance(0);
+    isPullingRef.current = false;
+  };
 
   // Handlers for Accounts
   const handleDeleteAccount = async (accountId: number) => {
@@ -109,23 +144,34 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white">
         <div className="bg-neutral-900 border border-white/20 rounded-3xl p-8 text-center space-y-3 max-w-xs w-full">
           <div className="w-10 h-10 rounded-full border-2 border-white border-t-transparent animate-spin mx-auto" />
-          <div className="text-sm font-bold text-white">Загрузка...</div>
+          <div className="text-sm font-bold text-white">Синхронизация с ботом...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col relative selection:bg-white selection:text-black">
-      {/* Subtle monochrome vignette */}
-      <div className="fixed top-0 left-0 right-0 h-40 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none -z-10" />
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="min-h-screen bg-black text-white flex flex-col relative selection:bg-white selection:text-black overflow-x-hidden"
+    >
+      {/* Pull to Refresh Indicator */}
+      {pullDistance > 0 && (
+        <div
+          style={{ height: `${pullDistance}px` }}
+          className="overflow-hidden flex items-center justify-center bg-neutral-950 transition-all duration-100 border-b border-white/10"
+        >
+          <div className={`w-5 h-5 rounded-full border-2 border-white border-t-transparent ${pullDistance >= 45 ? 'animate-spin' : ''}`} />
+          <span className="text-[11px] font-mono text-neutral-400 ml-2">
+            {pullDistance >= 45 ? 'Отпустите для обновления' : 'Потяните для обновления'}
+          </span>
+        </div>
+      )}
 
       {/* Top Header */}
-      <Header
-        user={user}
-        isSyncing={isSyncing}
-        onRefresh={() => loadData(true)}
-      />
+      <Header user={user} />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3">

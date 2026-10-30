@@ -1,7 +1,7 @@
 import React from 'react';
 import { UserProfile, AccountItem, TaskItem } from '../types';
 import { SUBSCRIPTION_PLANS } from '../services/api';
-import { Smartphone, Send, Zap, Clock, ChevronRight, User as UserIcon } from 'lucide-react';
+import { Smartphone, ListTodo, Zap, Clock, ChevronRight, User as UserIcon } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface ProfileViewProps {
@@ -140,7 +140,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           className="bg-neutral-900/70 border border-white/15 rounded-3xl p-4 cursor-pointer hover:border-white/30 active:scale-95 transition-all"
         >
           <div className="flex items-center justify-between mb-2">
-            <Send className="w-5 h-5 text-white" />
+            <ListTodo className="w-5 h-5 text-white" />
             <ChevronRight className="w-4 h-4 text-neutral-500" />
           </div>
           <div className="text-2xl font-bold text-white font-mono">

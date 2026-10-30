@@ -1,23 +1,16 @@
 import React from 'react';
-import { RefreshCw, User as UserIcon } from 'lucide-react';
+import { User as UserIcon } from 'lucide-react';
 import { UserProfile } from '../types';
-import { triggerHaptic } from '../services/telegram';
 
 interface HeaderProps {
   user: UserProfile;
-  isSyncing: boolean;
-  onRefresh: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  user,
-  isSyncing,
-  onRefresh,
-}) => {
+export const Header: React.FC<HeaderProps> = ({ user }) => {
   return (
-    <header className="sticky top-0 z-30 px-4 pt-3 pb-2.5 backdrop-blur-2xl bg-black/70 border-b border-white/10">
+    <header className="sticky top-0 z-30 px-4 pt-3 pb-2.5 backdrop-blur-2xl bg-black/80 border-b border-white/10 select-none">
       <div className="max-w-md mx-auto flex items-center justify-between">
-        {/* Left: Avatar & Branding */}
+        {/* Avatar & User info */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full border border-white/20 overflow-hidden bg-neutral-900 flex items-center justify-center flex-shrink-0 shadow-sm">
             {user.photo_url ? (
@@ -55,19 +48,6 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Right: Refresh action */}
-        <button
-          onClick={() => {
-            triggerHaptic('light');
-            onRefresh();
-          }}
-          disabled={isSyncing}
-          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-white active:scale-95 transition-all"
-          title="Синхронизировать"
-        >
-          <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-white' : ''}`} />
-        </button>
       </div>
     </header>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Smartphone, Send, Sparkles } from 'lucide-react';
+import { User, Smartphone, ListTodo, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 import { triggerHaptic } from '../services/telegram';
 
@@ -34,7 +34,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     {
       id: 'tasks' as TabType,
       label: 'Задачи',
-      icon: Send,
+      icon: ListTodo,
       badge: tasksCount > 0 ? tasksCount : null
     },
     {
@@ -47,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 pb-5 pt-2 px-4 pointer-events-none flex justify-center">
-      <nav className="pointer-events-auto bg-neutral-900/80 backdrop-blur-3xl border border-white/15 rounded-full p-1.5 flex items-center justify-between max-w-sm w-full shadow-[0_12px_40px_rgba(0,0,0,0.8)] relative">
+      <nav className="pointer-events-auto bg-neutral-900/85 backdrop-blur-3xl border border-white/15 rounded-full p-1.5 flex items-center justify-between max-w-sm w-full shadow-[0_12px_40px_rgba(0,0,0,0.8)] relative">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;

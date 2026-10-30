@@ -79,9 +79,12 @@ class BotSyncService {
     const fallbackUsername = tgUser?.username || '';
     const photoUrl = tgUser?.photo_url || '';
 
-    // 1. Try real bothost server
+    // 1. Fetch real user from bothost SQLite database
     try {
-      const res = await fetch(`${this.apiUrl}/api/user?user_id=${userId}`, { signal: AbortSignal.timeout(2500) });
+      const res = await fetch(`${this.apiUrl}/api/user?user_id=${userId}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
       if (res.ok) {
         const u = await res.json();
         const profile: UserProfile = {
@@ -101,10 +104,10 @@ class BotSyncService {
         return profile;
       }
     } catch {
-      // bothost offline or starting, fall back to storage
+      // bothost loading or starting
     }
 
-    // 2. Try Telegram CloudStorage
+    // 2. Fall back to cached CloudStorage or LocalStorage
     const key = getKey('user', userId);
     const cloudVal = await getTelegramCloud(key);
     if (cloudVal) {
@@ -116,7 +119,6 @@ class BotSyncService {
       }
     }
 
-    // 3. Try LocalStorage
     const saved = localStorage.getItem(key);
     if (saved) {
       try {
@@ -127,8 +129,8 @@ class BotSyncService {
       }
     }
 
-    // Default new user profile
-    const newUser: UserProfile = {
+    // Default
+    return {
       user_id: userId || DEFAULT_USER_ID,
       username: fallbackUsername,
       first_name: fallbackName,
@@ -139,9 +141,6 @@ class BotSyncService {
       last_sent_date: new Date().toISOString().split('T')[0],
       free_limit_used: 0,
     };
-    localStorage.setItem(key, JSON.stringify(newUser));
-    saveTelegramCloud(key, JSON.stringify(newUser));
-    return newUser;
   }
 
   // --- ACCOUNTS ---
@@ -149,7 +148,10 @@ class BotSyncService {
     const key = getKey('accounts', userId);
 
     try {
-      const res = await fetch(`${this.apiUrl}/api/accounts?user_id=${userId}`, { signal: AbortSignal.timeout(2500) });
+      const res = await fetch(`${this.apiUrl}/api/accounts?user_id=${userId}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
       if (res.ok) {
         const accs = await res.json();
         localStorage.setItem(key, JSON.stringify(accs));
@@ -157,7 +159,7 @@ class BotSyncService {
         return accs;
       }
     } catch {
-      // fallback
+      // fallback to cached
     }
 
     const cloudVal = await getTelegramCloud(key);
@@ -186,7 +188,10 @@ class BotSyncService {
     const key = getKey('tasks', userId);
 
     try {
-      const res = await fetch(`${this.apiUrl}/api/tasks?user_id=${userId}`, { signal: AbortSignal.timeout(2500) });
+      const res = await fetch(`${this.apiUrl}/api/tasks?user_id=${userId}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
       if (res.ok) {
         const tasks = await res.json();
         localStorage.setItem(key, JSON.stringify(tasks));
@@ -218,25 +223,30 @@ class BotSyncService {
     return [];
   }
 
-  // --- REAL TELETHON AUTH FLOW ---
+  // --- REAL TELETHON AUTH (NO FAKE SUCCESS) ---
   async authSendCode(userId: number, phone: string): Promise<{ ok: boolean; phone_hash?: string; error?: string }> {
     try {
       const res = await fetch(`${this.apiUrl}/api/auth/send_code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, phone }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(9000)
       });
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        return data;
       }
-    } catch {
-      // bothost timeout fallback
+      return {
+        ok: false,
+        error: `Сервер бота вернул ошибку ${res.status}. Убедитесь, что 1.py перезапущен на bothost.ru`
+      };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `Не удалось связаться с сервером бота (${errorMessage}). Проверьте работу 1.py на bothost.ru.`
+      };
     }
-
-    // Local fallback if bothost is reconnecting
-    await new Promise(r => setTimeout(r, 600));
-    return { ok: true, phone_hash: 'phash_' + Date.now() };
   }
 
   async authConfirmCode(userId: number, phone: string, code: string, phone_hash?: string): Promise<{ ok: boolean; need_2fa?: boolean; account?: AccountItem; error?: string }> {
@@ -245,7 +255,7 @@ class BotSyncService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, phone, code, phone_hash }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(9000)
       });
       if (res.ok) {
         const data = await res.json();
@@ -258,28 +268,17 @@ class BotSyncService {
         }
         return data;
       }
-    } catch {
-      // fallback
+      return {
+        ok: false,
+        error: `Сервер бота вернул ошибку ${res.status}. Неверный код подтверждения.`
+      };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `Сервер бота не ответил (${errorMessage}). Вход не выполнен.`
+      };
     }
-
-    // Local sync fallback
-    if (code === '22222') {
-      return { ok: true, need_2fa: true };
-    }
-    const accs = await this.getAccounts(userId);
-    const newAcc: AccountItem = {
-      id: Date.now(),
-      user_id: userId,
-      phone,
-      status: 'active',
-      last_used: 'Только что',
-      first_name: 'Аккаунт ' + phone.slice(-4)
-    };
-    accs.push(newAcc);
-    const key = getKey('accounts', userId);
-    localStorage.setItem(key, JSON.stringify(accs));
-    saveTelegramCloud(key, JSON.stringify(accs));
-    return { ok: true, need_2fa: false, account: newAcc };
   }
 
   async authConfirm2FA(userId: number, phone: string, password: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
@@ -288,7 +287,7 @@ class BotSyncService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, phone, password }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(9000)
       });
       if (res.ok) {
         const data = await res.json();
@@ -301,24 +300,11 @@ class BotSyncService {
         }
         return data;
       }
-    } catch {
-      // fallback
+      return { ok: false, error: 'Неверный пароль двухэтапной аутентификации' };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: `Ошибка связи с ботом: ${errorMessage}` };
     }
-
-    const accs = await this.getAccounts(userId);
-    const newAcc: AccountItem = {
-      id: Date.now(),
-      user_id: userId,
-      phone,
-      status: 'active',
-      last_used: 'Только что',
-      first_name: 'Аккаунт ' + phone.slice(-4)
-    };
-    accs.push(newAcc);
-    const key = getKey('accounts', userId);
-    localStorage.setItem(key, JSON.stringify(accs));
-    saveTelegramCloud(key, JSON.stringify(accs));
-    return { ok: true, account: newAcc };
   }
 
   async addAccountBySession(userId: number, sessionStr: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
@@ -327,7 +313,7 @@ class BotSyncService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, session: sessionStr }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(9000)
       });
       if (res.ok) {
         const data = await res.json();
@@ -340,29 +326,19 @@ class BotSyncService {
         }
         return data;
       }
-    } catch {
-      // fallback
+      return { ok: false, error: 'Недействительная сессия Telethon' };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: `Ошибка импорта сессии: ${errorMessage}` };
     }
-
-    const accs = await this.getAccounts(userId);
-    const newAcc: AccountItem = {
-      id: Date.now(),
-      user_id: userId,
-      phone: `+7 9${Math.floor(10000000 + Math.random() * 90000000)}`,
-      status: 'active',
-      last_used: 'Импортирован из session',
-      first_name: 'Импортированная сессия'
-    };
-    accs.push(newAcc);
-    const key = getKey('accounts', userId);
-    localStorage.setItem(key, JSON.stringify(accs));
-    saveTelegramCloud(key, JSON.stringify(accs));
-    return { ok: true, account: newAcc };
   }
 
   async deleteAccount(userId: number, accountId: number): Promise<boolean> {
     try {
-      await fetch(`${this.apiUrl}/api/accounts/${accountId}?user_id=${userId}`, { method: 'DELETE', signal: AbortSignal.timeout(3000) });
+      await fetch(`${this.apiUrl}/api/accounts/${accountId}?user_id=${userId}`, {
+        method: 'DELETE',
+        signal: AbortSignal.timeout(4000)
+      });
     } catch {
       // continue
     }
@@ -373,7 +349,7 @@ class BotSyncService {
     return true;
   }
 
-  // --- REAL TASKS SYNC ---
+  // --- REAL TASKS API ---
   async createTask(task: Partial<TaskItem>): Promise<TaskItem> {
     const userId = task.user_id || DEFAULT_USER_ID;
     try {
@@ -381,7 +357,7 @@ class BotSyncService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(task),
-        signal: AbortSignal.timeout(4000)
+        signal: AbortSignal.timeout(5000)
       });
       if (res.ok) {
         const created = await res.json();
@@ -427,7 +403,7 @@ class BotSyncService {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(4000)
       });
       if (res.ok) {
         const updated = await res.json();
@@ -460,7 +436,10 @@ class BotSyncService {
 
     try {
       const endpoint = nextStatus === 'running' ? 'start' : 'stop';
-      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}/${endpoint}`, { method: 'POST', signal: AbortSignal.timeout(3000) });
+      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}/${endpoint}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(4000)
+      });
       if (res.ok) {
         const data = await res.json();
         return data.status || nextStatus;
@@ -484,7 +463,7 @@ class BotSyncService {
     const tgUser = getTelegramUser();
     const userId = tgUser?.id || DEFAULT_USER_ID;
     try {
-      await fetch(`${this.apiUrl}/api/tasks/${taskId}`, { method: 'DELETE', signal: AbortSignal.timeout(3000) });
+      await fetch(`${this.apiUrl}/api/tasks/${taskId}`, { method: 'DELETE', signal: AbortSignal.timeout(4000) });
     } catch {
       // continue
     }
@@ -593,7 +572,7 @@ class BotSyncService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, plan: planKey, days }),
-        signal: AbortSignal.timeout(4000)
+        signal: AbortSignal.timeout(5000)
       });
       if (res.ok) {
         const updated = await res.json();
