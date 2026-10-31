@@ -1,5 +1,13 @@
 export type PlanTier = 'free' | 'pro' | 'premium';
 
+export interface AutoResponderConfig {
+  enabled: boolean;
+  text: string;
+  trigger: 'offline_only' | 'first_message_always';
+  delay_seconds: number;
+  total_replies_sent?: number;
+}
+
 export interface UserProfile {
   user_id: number;
   username?: string;
@@ -15,6 +23,7 @@ export interface UserProfile {
   referred_by?: number;
   referrals_count?: number;
   referrals_active?: number;
+  auto_responder?: AutoResponderConfig;
 }
 
 export interface AccountItem {
@@ -22,9 +31,10 @@ export interface AccountItem {
   user_id: number;
   phone: string;
   session?: string;
-  status: 'active' | 'pending' | 'banned' | 'error';
+  status: 'active' | 'pending' | 'banned' | 'error' | 'spamblock';
   last_used?: string;
   first_name?: string;
+  has_telegram_premium?: boolean;
 }
 
 export interface ChatRecipient {
@@ -33,7 +43,8 @@ export interface ChatRecipient {
   chat_id: number;
   username: string;
   title: string;
-  status?: 'pending' | 'done' | 'error';
+  status?: 'pending' | 'done' | 'error' | 'spamblock';
+  last_error?: string;
 }
 
 export interface TaskItem {
@@ -44,15 +55,33 @@ export interface TaskItem {
   text: string;
   delay_min: number;
   delay_max: number;
-  status: 'running' | 'stopped' | 'done' | 'limit_reached' | 'no_accounts' | 'connection_error';
+  status: 'running' | 'stopped' | 'done' | 'limit_reached' | 'no_accounts' | 'connection_error' | 'spamblock';
   sent: number;
   errors: number;
+  spamblocks?: number; // count of spamblocks (red exclamation)
   loop: number; // 0 or 1
   media?: string | null;
   chats?: ChatRecipient[];
+
+  // Mode: Chats vs Direct Messages (DM) to chat members (PRO / PREMIUM+ ONLY)
+  mode?: 'chats' | 'direct_messages';
+  source_chats?: string; // Group links/usernames to scrape users from
+  dm_users_limit?: number; // Limit of scraped members per group
+
+  // Auto-responder settings
   auto_reply?: number; // 0 or 1
   auto_reply_text?: string;
-  auto_reply_mode?: 'reply_latest' | 'reply_matching';
+  auto_reply_mode?: 'reply_latest' | 'offline_only' | 'first_message_always';
+  auto_reply_offline?: boolean;
+
+  // Premium Emojis
+  has_premium_emojis?: boolean;
+
+  // Auto-solve PR / Guard bots & join sponsor channels (ALL PLANS)
+  auto_resolve_pr_bots?: boolean;
+
+  // Free Tier Watermark
+  include_watermark?: boolean;
 }
 
 export interface PlanConfig {
@@ -93,5 +122,7 @@ export interface AdminStats {
   total_referred_users: number;
   total_rewarded_referrals: number;
   total_bonus_awarded: number;
+  total_spamblocks_detected?: number;
+  total_autoreplies_sent?: number;
   required_channel?: string;
 }

@@ -8,7 +8,11 @@ import {
   Gift, 
   ChevronRight, 
   Layers, 
-  Smartphone
+  Smartphone,
+  MessageSquareQuote,
+  ShieldCheck,
+  Send,
+  Sparkles
 } from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
@@ -19,6 +23,7 @@ interface ProfileViewProps {
   onGoToTab: (tab: 'subscription' | 'accounts' | 'tasks') => void;
   onOpenAddAccount: () => void;
   onOpenReferrals: () => void;
+  onOpenAutoresponder: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -28,6 +33,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onGoToTab,
   onOpenAddAccount,
   onOpenReferrals,
+  onOpenAutoresponder,
 }) => {
   const plan = SUBSCRIPTION_PLANS[user.sub_plan] || SUBSCRIPTION_PLANS.free;
   const bonus = user.bonus_messages || 0;
@@ -48,9 +54,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const sentCount = user.sub_plan === 'free' ? user.free_limit_used : user.daily_sent;
   const limitPercent = Math.min(100, Math.round((sentCount / totalLimit) * 100));
 
+  const autoResponder = user.auto_responder;
+  const isAutoResponderOn = autoResponder?.enabled ?? true;
+
   return (
     <div className="space-y-3.5 pb-28">
-      {/* Profile Card (Without border or frame around avatar) */}
+      {/* Profile Card */}
       <div className="apple-group-card p-4 flex items-center gap-3.5">
         <div className="w-12 h-12 rounded-full overflow-hidden bg-[#181920] flex items-center justify-center flex-shrink-0">
           {user.photo_url ? (
@@ -110,6 +119,39 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <Users className="w-4 h-4" />
           <span>Рефералы</span>
         </button>
+      </div>
+
+      {/* Autoresponder Feature Card (Universal for Free, Pro, Premium+) */}
+      <div 
+        onClick={() => {
+          triggerHaptic('light');
+          onOpenAutoresponder();
+        }}
+        className="apple-group-card p-4 flex items-center justify-between cursor-pointer hover:bg-white/[0.06] transition-all active:scale-[0.99] border-purple-500/20 bg-purple-950/15"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center flex-shrink-0">
+            <MessageSquareQuote className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[14px] font-semibold text-white">Автоответчик в ЛС</span>
+              <span className="text-[9px] font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.2 rounded-full uppercase border border-emerald-500/30">
+                Все тарифы
+              </span>
+            </div>
+            <p className="text-[12px] text-neutral-400 mt-0.5">
+              {isAutoResponderOn 
+                ? '🟢 Активен (отвечает, когда вы не в сети)' 
+                : '⚪ Выключен'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 text-xs text-purple-400 font-semibold">
+          <span>Настроить</span>
+          <ChevronRight className="w-4 h-4" />
+        </div>
       </div>
 
       {/* Bonus Messages Banner if active */}
@@ -172,6 +214,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             {bonus > 0 && <span className="text-blue-400">+{bonus} бонусных</span>}
           </div>
         </div>
+
+        {/* Note on Free Watermark */}
+        {user.sub_plan === 'free' && (
+          <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-neutral-400">
+            <span>В постах добавляется вотермарка бота</span>
+            <button
+              onClick={() => onGoToTab('subscription')}
+              className="text-blue-400 hover:text-blue-300 font-semibold"
+            >
+              Снять в Pro →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards: Accounts & Tasks */}

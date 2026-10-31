@@ -1,6 +1,20 @@
 import React, { useState } from 'react';
 import { TaskItem, AccountItem, UserProfile } from '../types';
-import { Plus, Play, Square, Layers, RotateCw, MessageSquareQuote, CheckCircle2, Clock, AlertTriangle, Filter } from 'lucide-react';
+import { 
+  Plus, 
+  Play, 
+  Square, 
+  Layers, 
+  RotateCw, 
+  MessageSquareQuote, 
+  Clock, 
+  AlertTriangle, 
+  Filter, 
+  Sparkles, 
+  ShieldCheck, 
+  Send,
+  AlertOctagon
+} from 'lucide-react';
 import { triggerHaptic } from '../services/telegram';
 
 interface TasksViewProps {
@@ -40,6 +54,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
   const runningCount = tasks.filter(t => t.status === 'running').length;
   const totalSent = tasks.reduce((sum, t) => sum + (t.sent || 0), 0);
+  const totalSpamblocks = tasks.reduce((sum, t) => sum + (t.spamblocks || (t.status === 'spamblock' ? 1 : 0)), 0);
   const totalErrors = tasks.reduce((sum, t) => sum + (t.errors || 0), 0);
 
   const filteredTasks = tasks.filter(task => {
@@ -48,7 +63,16 @@ export const TasksView: React.FC<TasksViewProps> = ({
     return true;
   });
 
-  const getStatusBadge = (status: TaskItem['status']) => {
+  const getStatusBadge = (status: TaskItem['status'], spamblocks = 0) => {
+    if (status === 'spamblock' || spamblocks > 0) {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+          🛑 Спам-блок !
+        </span>
+      );
+    }
+
     switch (status) {
       case 'running':
         return (
@@ -101,10 +125,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </button>
       </div>
 
-      {/* Task Fleet Statistics Bar */}
-      <div className="apple-group-card p-3.5 grid grid-cols-3 gap-2 text-center">
+      {/* Task Fleet Statistics Bar (with dedicated Spam-block tracking) */}
+      <div className="apple-group-card p-3 grid grid-cols-4 gap-2 text-center">
         <div className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-          <div className="text-[10px] text-neutral-400 font-mono uppercase">Активные</div>
+          <div className="text-[10px] text-neutral-400 font-mono uppercase">Активны</div>
           <div className="text-base font-bold text-blue-400 font-mono mt-0.5">
             {runningCount}
           </div>
@@ -117,9 +141,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
           </div>
         </div>
 
+        <div className={`p-2 rounded-xl border ${totalSpamblocks > 0 ? 'bg-rose-500/10 border-rose-500/30' : 'bg-white/[0.03] border-white/[0.05]'}`}>
+          <div className="text-[10px] text-neutral-400 font-mono uppercase flex items-center justify-center gap-0.5">
+            <span>Спам-блок</span>
+            {totalSpamblocks > 0 && <span className="text-rose-400 font-bold">!</span>}
+          </div>
+          <div className={`text-base font-bold font-mono mt-0.5 ${totalSpamblocks > 0 ? 'text-rose-400 animate-pulse' : 'text-neutral-300'}`}>
+            {totalSpamblocks}
+          </div>
+        </div>
+
         <div className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
           <div className="text-[10px] text-neutral-400 font-mono uppercase">Ошибок</div>
-          <div className={`text-base font-bold font-mono mt-0.5 ${totalErrors > 0 ? 'text-rose-400' : 'text-neutral-300'}`}>
+          <div className={`text-base font-bold font-mono mt-0.5 ${totalErrors > 0 ? 'text-amber-400' : 'text-neutral-300'}`}>
             {totalErrors}
           </div>
         </div>
@@ -199,6 +233,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
           filteredTasks.map((task) => {
             const isRunning = task.status === 'running';
             const isToggling = loadingTaskId === task.id;
+            const hasSpam = (task.spamblocks && task.spamblocks > 0) || task.status === 'spamblock';
 
             return (
               <div
@@ -211,21 +246,39 @@ export const TasksView: React.FC<TasksViewProps> = ({
               >
                 {/* Header row */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-mono text-sm font-bold text-white">
                       #{task.id}
                     </span>
-                    {getStatusBadge(task.status)}
-                    {task.loop === 1 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/[0.08] text-neutral-300 flex items-center gap-1">
-                        <RotateCw className="w-2.5 h-2.5" />
-                        цикл
+                    {getStatusBadge(task.status, task.spamblocks)}
+
+                    {task.mode === 'direct_messages' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
+                        <Send className="w-2.5 h-2.5" /> ЛС
                       </span>
                     )}
+
+                    {task.has_premium_emojis && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center gap-0.5">
+                        <Sparkles className="w-2.5 h-2.5" /> Emojis
+                      </span>
+                    )}
+
+                    {task.auto_resolve_pr_bots && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5">
+                        <ShieldCheck className="w-2.5 h-2.5" /> PR-бот
+                      </span>
+                    )}
+
+                    {task.loop === 1 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/[0.08] text-neutral-300 flex items-center gap-1">
+                        <RotateCw className="w-2.5 h-2.5" /> цикл
+                      </span>
+                    )}
+
                     {task.auto_reply === 1 && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
-                        <MessageSquareQuote className="w-3 h-3" />
-                        автоответ
+                        <MessageSquareQuote className="w-3 h-3" /> автоответ
                       </span>
                     )}
                   </div>
@@ -261,8 +314,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 {/* Footer details */}
                 <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono pt-2 border-t border-white/[0.06]">
                   <div className="flex items-center gap-3">
-                    <span>Отправлено: <strong className="text-white">{task.sent}</strong></span>
-                    {task.errors > 0 && <span className="text-rose-400">Ошибок: {task.errors}</span>}
+                    <span>Доставлено: <strong className="text-white">{task.sent}</strong></span>
+                    {hasSpam && (
+                      <span className="text-rose-400 font-bold flex items-center gap-0.5">
+                        <AlertOctagon className="w-3 h-3" /> Спам-блок: {task.spamblocks || 1}
+                      </span>
+                    )}
+                    {task.errors > 0 && <span className="text-amber-400">Ошибок: {task.errors}</span>}
                   </div>
                   <span>Интервал: {task.delay_min}–{task.delay_max}с</span>
                 </div>

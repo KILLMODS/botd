@@ -198,7 +198,12 @@ def db_init():
             "terms_accepted": "INTEGER DEFAULT 0",
             "bonus_messages": "INTEGER DEFAULT 0",
             "clicked_add_acc": "INTEGER DEFAULT 0",
-            "clicked_create_task": "INTEGER DEFAULT 0"
+            "clicked_create_task": "INTEGER DEFAULT 0",
+            "ar_enabled": "INTEGER DEFAULT 1",
+            "ar_text": "TEXT DEFAULT 'Здравствуйте! Сейчас я не в сети, отвечу на ваше сообщение, как только освобожусь.'",
+            "ar_trigger": "TEXT DEFAULT 'offline_only'",
+            "ar_delay": "INTEGER DEFAULT 2",
+            "ar_replies_count": "INTEGER DEFAULT 0"
         }
         for col, col_def in new_user_cols.items():
             if col not in user_cols:
@@ -219,6 +224,20 @@ def db_init():
             c.execute("ALTER TABLE tasks ADD COLUMN auto_reply_text TEXT DEFAULT ''")
         if "auto_reply_mode" not in task_cols:
             c.execute("ALTER TABLE tasks ADD COLUMN auto_reply_mode TEXT DEFAULT 'reply_latest'")
+        if "mode" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN mode TEXT DEFAULT 'chats'")
+        if "source_chats" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN source_chats TEXT DEFAULT ''")
+        if "dm_users_limit" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN dm_users_limit INTEGER DEFAULT 25")
+        if "spamblocks" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN spamblocks INTEGER DEFAULT 0")
+        if "has_premium_emojis" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN has_premium_emojis INTEGER DEFAULT 0")
+        if "auto_resolve_pr_bots" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN auto_resolve_pr_bots INTEGER DEFAULT 1")
+        if "include_watermark" not in task_cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN include_watermark INTEGER DEFAULT 0")
 
         # Инициализация дефолтных настроек
         c.execute("INSERT OR IGNORE INTO bot_settings (key, value) VALUES ('required_channel', ?)", (REQUIRED_CHANNEL,))
@@ -411,11 +430,19 @@ def db_delete_account(phone: str, user_id: int):
     with db_conn() as c:
         c.execute("DELETE FROM accounts WHERE phone=? AND user_id=?", (phone, user_id))
 
-def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, chats: list, delay_min: int, delay_max: int, loop=False, media=None, auto_reply=0, auto_reply_text="", auto_reply_mode="reply_latest"):
+def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, chats: list, delay_min: int, delay_max: int, loop=False, media=None, auto_reply=0, auto_reply_text="", auto_reply_mode="reply_latest", mode="chats", source_chats="", dm_users_limit=25, has_premium_emojis=0, auto_resolve_pr_bots=1, include_watermark=0):
     with db_conn() as c:
         cur = c.execute(
-            "INSERT INTO tasks (user_id, account_id, target_accs, text, delay_min, delay_max, loop, media, auto_reply, auto_reply_text, auto_reply_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (user_id, account_id, target_accs, text, delay_min, delay_max, 1 if loop else 0, media, 1 if auto_reply else 0, auto_reply_text or "", auto_reply_mode or "reply_latest")
+            """INSERT INTO tasks (
+                user_id, account_id, target_accs, text, delay_min, delay_max, 
+                loop, media, auto_reply, auto_reply_text, auto_reply_mode,
+                mode, source_chats, dm_users_limit, has_premium_emojis, auto_resolve_pr_bots, include_watermark, spamblocks
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)""",
+            (
+                user_id, account_id, target_accs, text, delay_min, delay_max, 
+                1 if loop else 0, media, 1 if auto_reply else 0, auto_reply_text or "", auto_reply_mode or "reply_latest",
+                mode or "chats", source_chats or "", dm_users_limit or 25, 1 if has_premium_emojis else 0, 1 if auto_resolve_pr_bots else 0, 1 if include_watermark else 0
+            )
         )
         task_id = cur.lastrowid
         for ch in chats:
@@ -462,6 +489,10 @@ def db_inc_sent(task_id: int):
 def db_inc_errors(task_id: int):
     with db_conn() as c:
         c.execute("UPDATE tasks SET errors=errors+1 WHERE id=?", (task_id,))
+
+def db_inc_spamblocks(task_id: int):
+    with db_conn() as c:
+        c.execute("UPDATE tasks SET spamblocks=spamblocks+1 WHERE id=?", (task_id,))
 
 def db_get_pending_chats(task_id: int):
     with db_conn() as c:
@@ -826,21 +857,82 @@ async def _send_one(client, target, text, media, reply_to=None):
         else:
             await client.send_message(target, text)
 
+async def solve_pr_bot_challenge(client: TelegramClient, chat_target):
+    """
+    Проверяет, прислал ли PR-бот или бот модерации проверку/капчу с инлайн кнопками,
+    вступает в спонсорские каналы/группы и нажимает кнопки подтверждения.
+    """
+    try:
+        await asyncio.sleep(2.5)
+        me = await client.get_me()
+        if not me: return
+        my_id = me.id
+        my_user = (me.username or "").lower()
+
+        msgs = await client.get_messages(chat_target, limit=6)
+        for m in msgs:
+            if not m or not m.from_id: continue
+            is_relevant = False
+            if m.mentioned:
+                is_relevant = True
+            elif my_user and f"@{my_user}" in (m.text or "").lower():
+                is_relevant = True
+            elif m.reply_to and hasattr(m.reply_to, 'reply_to_msg_id'):
+                is_relevant = True
+
+            if is_relevant and m.buttons:
+                for row in m.buttons:
+                    for btn in row:
+                        if btn.url:
+                            url_clean = btn.url.replace("https://t.me/", "").replace("t.me/", "")
+                            if "+" in url_clean or "joinchat" in url_clean:
+                                try:
+                                    hash_str = url_clean.split("+")[-1].split("joinchat/")[-1]
+                                    await client(functions.messages.ImportChatInviteRequest(hash=hash_str))
+                                    log.info(f"🛡️ PR-бот: авто-вступление по ссылке-приглашению {btn.url}")
+                                except Exception as join_ex:
+                                    log.debug(f"Не удалось вступить по инвайту: {join_ex}")
+                            elif not url_clean.endswith("bot"):
+                                try:
+                                    await client(functions.channels.JoinChannelRequest(channel=url_clean))
+                                    log.info(f"🛡️ PR-бот: авто-подписка на канал спонсора @{url_clean}")
+                                except Exception as join_ch_ex:
+                                    log.debug(f"Не удалось подписаться на канал: {join_ch_ex}")
+                        elif btn.data:
+                            try:
+                                await btn.click()
+                                log.info(f"🛡️ PR-бот: нажата инлайн-кнопка '{btn.text}'")
+                            except Exception as click_ex:
+                                log.debug(f"Не удалось нажать кнопку: {click_ex}")
+    except Exception as ex:
+        log.debug(f"Ошибка проверки PR-бота в {chat_target}: {ex}")
+
 async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_min: int, delay_max: int, done_cb):
     total_sent = 0
     total_errors = 0
+    total_spamblocks = 0
 
     try:
         task = db_get_task(task_id)
         if not task: return
 
-        # Проверка прав на автоответчик (только тарифы Pro и Premium+)
         user_info = db_get_or_create_user(user_id)
         user_plan = user_info.get("sub_plan", "free")
         is_pro_or_prem = user_plan in ["pro", "premium"] or user_id in ADMIN_IDS
-        can_auto_reply = bool(task.get("auto_reply", 0)) and is_pro_or_prem
-        custom_reply_text = (task.get("auto_reply_text") or "").strip()
-        effective_text = custom_reply_text if (can_auto_reply and custom_reply_text) else text
+
+        # Для бесплатного тарифа добавляется вотермарка бота в конце каждого поста
+        effective_text = text
+        if user_plan == "free":
+            watermark = f"\n\n📢 Отправлено с помощью @{BOT_USERNAME}"
+            if watermark not in effective_text:
+                effective_text = effective_text.strip() + watermark
+
+        # Проверка режима: рассылка по чатам или по ЛС
+        is_dm_mode = task.get("mode") == "direct_messages"
+        if is_dm_mode and not is_pro_or_prem:
+            db_set_task_status(task_id, "limit_reached")
+            await done_cb(task_id, 0, 0, 0, "Рассылка по ЛС доступна только в Pro и Premium+")
+            return
 
         target_accs = task.get("target_accs", "all")
         user_accs = [a for a in db_get_user_accounts(user_id) if a["status"] == "active"]
@@ -907,16 +999,52 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
                 target = chat.get("username") or chat["chat_id"]
                 reply_msg_id = None
 
-                # Автоответчик: берёт последнее входящее сообщение из чата и отвечает на него
-                if can_auto_reply:
+                # Режим ЛС: парсинг участников чата и отправка в личные сообщения
+                if is_dm_mode:
                     try:
-                        latest_msgs = await client.get_messages(target, limit=1)
-                        if latest_msgs and len(latest_msgs) > 0 and latest_msgs[0].id:
-                            reply_msg_id = latest_msgs[0].id
-                            log.info(f"[{task_id}] 🤖 Автоответчик: отвечаем на msg_id={reply_msg_id} в {target}")
-                    except Exception as ar_ex:
-                        log.debug(f"[{task_id}] Автоответчик: не удалось прочитать последнее сообщение в {target}: {ar_ex}")
+                        dm_limit = int(task.get("dm_users_limit", 25) or 25)
+                        log.info(f"[{task_id}] 💬 Парсинг участников из {target} (лимит {dm_limit})...")
+                        participants = await client.get_participants(target, limit=dm_limit)
+                        sent_in_dm = 0
+                        for user_entity in participants:
+                            if task_id not in running_tasks: break
+                            if getattr(user_entity, 'bot', False) or getattr(user_entity, 'deleted', False) or getattr(user_entity, 'is_self', False):
+                                continue
 
+                            can_dm, _, _ = db_check_user_limits(user_id)
+                            if not can_dm: break
+
+                            try:
+                                await _send_one(client, user_entity.id, effective_text, media)
+                                total_sent += 1
+                                sent_in_dm += 1
+                                db_inc_sent(task_id)
+                                db_inc_user_sent(user_id)
+                                log.info(f"[{task_id}] 💬 ЛС отправлено пользователю @{getattr(user_entity, 'username', user_entity.id)}")
+                            except PeerFloodError:
+                                log.error(f"[{task_id}] 🛑 Спам-блок на аккаунте {acc['phone']} при ЛС")
+                                total_errors += 1
+                                total_spamblocks += 1
+                                db_inc_errors(task_id)
+                                db_inc_spamblocks(task_id)
+                                db_set_task_status(task_id, "spamblock")
+                                break
+                            except Exception as dm_err:
+                                total_errors += 1
+                                db_inc_errors(task_id)
+                                log.warning(f"[{task_id}] Ошибка ЛС пользователю: {dm_err}")
+
+                            await asyncio.sleep(random.randint(delay_min, delay_max))
+
+                        db_mark_chat_done(chat["id"])
+                    except Exception as parse_ex:
+                        log.warning(f"[{task_id}] Не удалось распарсить участников из {target}: {parse_ex}")
+                        total_errors += 1
+                        db_inc_errors(task_id)
+                        db_mark_chat_done(chat["id"])
+                    continue
+
+                # Обычный режим рассылки по группам
                 try:
                     await _send_one(client, target, effective_text, media, reply_to=reply_msg_id)
                     total_sent += 1
@@ -924,6 +1052,19 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
                     db_inc_user_sent(user_id)
                     db_mark_chat_done(chat["id"])
                     log.info(f"[{task_id}] Отправлено на {target} ({total_sent}/{total})")
+
+                    # Автопрохождение проверок PR/Guard-ботов
+                    if task.get("auto_resolve_pr_bots", 1):
+                        asyncio.create_task(solve_pr_bot_challenge(client, target))
+
+                except PeerFloodError as ex:
+                    log.error(f"[{task_id}] 🛑 Спам-блок (PeerFloodError) на аккаунте {acc['phone']} в {target}")
+                    total_errors += 1
+                    total_spamblocks += 1
+                    db_inc_errors(task_id)
+                    db_inc_spamblocks(task_id)
+                    db_set_task_status(task_id, "spamblock")
+                    await asyncio.sleep(15)
                 except FloodWaitError as ex:
                     log.warning(f"[{task_id}] FloodWait {ex.seconds}s на аккаунте {acc['phone']}")
                     total_errors += 1
@@ -941,7 +1082,7 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
                 if i < total - 1:
                     await asyncio.sleep(random.randint(delay_min, delay_max))
 
-        status = "done" if task_id in running_tasks else "stopped"
+        status = "spamblock" if total_spamblocks > 0 and total_sent == 0 else ("done" if task_id in running_tasks else "stopped")
         running_tasks.pop(task_id, None)
         db_set_task_status(task_id, status)
         await done_cb(task_id, total_sent, total_errors, 0, status)
@@ -2249,6 +2390,34 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
         ref_stats = db_get_referral_stats(uid)
         u["referrals_count"] = ref_stats["total_invited"]
         u["referrals_active"] = ref_stats["active_invited"]
+        u["auto_responder"] = {
+            "enabled": bool(u.get("ar_enabled", 1)),
+            "text": u.get("ar_text") or "Здравствуйте! Сейчас я не в сети, отвечу на ваше сообщение, как только освобожусь.",
+            "trigger": u.get("ar_trigger", "offline_only"),
+            "delay_seconds": u.get("ar_delay", 2),
+            "total_replies_sent": u.get("ar_replies_count", 0)
+        }
+        return web.json_response(u)
+
+    async def api_save_autoresponder(req):
+        data = await req.json()
+        uid = int(data.get("user_id", 0))
+        if not uid:
+            return web.json_response({"error": "user_id required"}, status=400)
+        enabled = 1 if data.get("enabled", True) else 0
+        text = data.get("text", "").strip()
+        trigger = data.get("trigger", "offline_only")
+        delay = int(data.get("delay_seconds", 2))
+        with db_conn() as c:
+            c.execute("UPDATE users SET ar_enabled=?, ar_text=?, ar_trigger=?, ar_delay=? WHERE user_id=?", (enabled, text, trigger, delay, uid))
+        u = db_get_or_create_user(uid)
+        u["auto_responder"] = {
+            "enabled": bool(enabled),
+            "text": text,
+            "trigger": trigger,
+            "delay_seconds": delay,
+            "total_replies_sent": u.get("ar_replies_count", 0)
+        }
         return web.json_response(u)
 
     async def api_accept_terms(req):
@@ -2368,7 +2537,13 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
             media=data.get("media"),
             auto_reply=1 if data.get("auto_reply") else 0,
             auto_reply_text=data.get("auto_reply_text", ""),
-            auto_reply_mode=data.get("auto_reply_mode", "reply_latest")
+            auto_reply_mode=data.get("auto_reply_mode", "reply_latest"),
+            mode=data.get("mode", "chats"),
+            source_chats=data.get("source_chats", ""),
+            dm_users_limit=int(data.get("dm_users_limit", 25) or 25),
+            has_premium_emojis=1 if data.get("has_premium_emojis") else 0,
+            auto_resolve_pr_bots=1 if data.get("auto_resolve_pr_bots", 1) else 0,
+            include_watermark=1 if data.get("include_watermark") else 0
         )
         task = db_get_task(tid)
         task["chats"] = chats
@@ -2382,22 +2557,16 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
         if not task or (uid and task.get("user_id") != uid):
             return web.json_response({"error": "Forbidden or not found"}, status=403)
         with db_conn() as c:
-            if "text" in data:
-                c.execute("UPDATE tasks SET text=? WHERE id=?", (data["text"], tid))
-            if "delay_min" in data:
-                c.execute("UPDATE tasks SET delay_min=? WHERE id=?", (data["delay_min"], tid))
-            if "delay_max" in data:
-                c.execute("UPDATE tasks SET delay_max=? WHERE id=?", (data["delay_max"], tid))
-            if "loop" in data:
-                c.execute("UPDATE tasks SET loop=? WHERE id=?", (1 if data["loop"] else 0, tid))
-            if "target_accs" in data:
-                c.execute("UPDATE tasks SET target_accs=? WHERE id=?", (data["target_accs"], tid))
-            if "auto_reply" in data:
-                c.execute("UPDATE tasks SET auto_reply=? WHERE id=?", (1 if data["auto_reply"] else 0, tid))
-            if "auto_reply_text" in data:
-                c.execute("UPDATE tasks SET auto_reply_text=? WHERE id=?", (data["auto_reply_text"], tid))
-            if "auto_reply_mode" in data:
-                c.execute("UPDATE tasks SET auto_reply_mode=? WHERE id=?", (data["auto_reply_mode"], tid))
+            for field in [
+                "text", "delay_min", "delay_max", "loop", "target_accs", 
+                "auto_reply", "auto_reply_text", "auto_reply_mode",
+                "mode", "source_chats", "dm_users_limit", "has_premium_emojis",
+                "auto_resolve_pr_bots", "include_watermark"
+            ]:
+                if field in data:
+                    val = data[field]
+                    if isinstance(val, bool): val = 1 if val else 0
+                    c.execute(f"UPDATE tasks SET {field}=? WHERE id=?", (val, tid))
         task = db_get_task(tid)
         return web.json_response(task)
 
@@ -2478,6 +2647,7 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
     app.router.add_get("/api/health", api_health)
     app.router.add_get("/api/user", api_get_user)
     app.router.add_post("/api/user/accept_terms", api_accept_terms)
+    app.router.add_post("/api/user/autoresponder", api_save_autoresponder)
     app.router.add_get("/api/referrals", api_get_referrals)
     app.router.add_get("/api/admin/stats", api_get_admin_stats)
     app.router.add_get("/api/accounts", api_get_accounts)

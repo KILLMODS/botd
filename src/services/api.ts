@@ -1,4 +1,4 @@
-import { UserProfile, AccountItem, TaskItem, PlanConfig, ReferralInfo, AdminStats } from '../types';
+import { UserProfile, AccountItem, TaskItem, PlanConfig, ReferralInfo, AdminStats, AutoResponderConfig } from '../types';
 import { getTelegramUser, saveTelegramCloud, getTelegramCloud } from './telegram';
 
 export const BOT_TOKEN = '8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE';
@@ -20,8 +20,10 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     features: [
       '1 Telegram аккаунт',
       'До 500 сообщений (+бонусы)',
+      '🤖 Автоответчик в ЛС (при оффлайне)',
+      '🛡️ Автоподписка на спонсоров / PR-ботов',
+      '🆓 Вотермарка в конце постов',
       'Задержка от 10 сек',
-      'Одиночная рассылка',
       '+50 сообщений за реферала'
     ]
   },
@@ -39,9 +41,13 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     features: [
       'До 5 Telegram аккаунтов',
       '5 000 сообщений / день',
+      '💬 Рассылка по ЛС участникам групп (PRO)',
+      '✨ Поддержка Telegram Premium эмодзи',
+      '🚫 Без вотермарок (чистые посты)',
+      '🤖 Умный автоответчик в ЛС и чатах',
+      '🛡️ Автопрохождение проверок PR-ботов',
+      '🛑 Анализ и защита от спам-блока',
       'Быстрая задержка от 5 сек',
-      'Умный автоответчик в чатах',
-      'Медиа-вложения (фото/видео)',
       'Бесконечный режим (Loop)',
       '+100 сообщений за реферала'
     ]
@@ -59,11 +65,15 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     features: [
       'До 15 Telegram аккаунтов',
       '10 000 сообщений / день',
+      '💬 Рассылка по ЛС на максимум скорости',
+      '✨ Поддержка Telegram Premium эмодзи',
+      '🚫 Чистые посты без вотермарок',
+      '🤖 Автоответчик в ЛС и группах',
+      '🛡️ Автопрохождение PR/Guard-ботов',
+      '🛑 Приоритетный обход FloodWait и спам-блока',
       'Турбо-задержка от 1 сек',
-      'Умный автоответчик в чатах',
       'Бесконечный автоповтор по кругу',
-      '+230 сообщений за реферала',
-      'Приоритетный обход FloodWait'
+      '+230 сообщений за реферала'
     ]
   }
 };
@@ -107,6 +117,14 @@ class BotSyncService {
     const photoUrl = tgUser?.photo_url || '';
     const isOwnerOrAdmin = ADMIN_USER_IDS.includes(Number(userId));
 
+    const defaultAutoResponder: AutoResponderConfig = {
+      enabled: true,
+      text: 'Здравствуйте! Сейчас я не в сети, отвечу на ваше сообщение, как только освобожусь.',
+      trigger: 'offline_only',
+      delay_seconds: 2,
+      total_replies_sent: 0
+    };
+
     // 1. Fetch real user from bothost SQLite database
     try {
       const res = await fetch(`${this.apiUrl}/api/user?user_id=${userId}`, {
@@ -132,6 +150,7 @@ class BotSyncService {
           referred_by: u.referred_by || 0,
           referrals_count: u.referrals_count || 0,
           referrals_active: u.referrals_active || 0,
+          auto_responder: u.auto_responder || defaultAutoResponder
         };
         const key = getKey('user', userId);
         localStorage.setItem(key, JSON.stringify(profile));
@@ -160,7 +179,8 @@ class BotSyncService {
           username: fallbackUsername,
           photo_url: photoUrl,
           terms_accepted: parsed.terms_accepted ?? 1,
-          bonus_messages: parsed.bonus_messages || 0
+          bonus_messages: parsed.bonus_messages || 0,
+          auto_responder: parsed.auto_responder || defaultAutoResponder
         };
       } catch {
         // continue
@@ -182,7 +202,8 @@ class BotSyncService {
           username: fallbackUsername,
           photo_url: photoUrl,
           terms_accepted: parsed.terms_accepted ?? 1,
-          bonus_messages: parsed.bonus_messages || 0
+          bonus_messages: parsed.bonus_messages || 0,
+          auto_responder: parsed.auto_responder || defaultAutoResponder
         };
       } catch {
         // continue
@@ -206,8 +227,30 @@ class BotSyncService {
       terms_accepted: 1,
       bonus_messages: 0,
       referrals_count: 0,
-      referrals_active: 0
+      referrals_active: 0,
+      auto_responder: defaultAutoResponder
     };
+  }
+
+  // --- SAVE AUTORESPONDER SETTINGS ---
+  async saveAutoResponder(userId: number, config: AutoResponderConfig): Promise<UserProfile> {
+    try {
+      await fetch(`${this.apiUrl}/api/user/autoresponder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, ...config }),
+        signal: AbortSignal.timeout(4000)
+      });
+    } catch {
+      // offline/fallback
+    }
+
+    const key = getKey('user', userId);
+    const user = await this.getUser(userId);
+    user.auto_responder = config;
+    localStorage.setItem(key, JSON.stringify(user));
+    saveTelegramCloud(key, JSON.stringify(user));
+    return user;
   }
 
   // --- ACCOUNTS ---
@@ -290,7 +333,7 @@ class BotSyncService {
     return [];
   }
 
-  // --- REAL TELETHON AUTH (NO FAKE SUCCESS) ---
+  // --- REAL TELETHON AUTH ---
   async authSendCode(userId: number, phone: string): Promise<{ ok: boolean; phone_hash?: string; error?: string }> {
     try {
       const res = await fetch(`${this.apiUrl}/api/auth/send_code`, {
@@ -416,7 +459,7 @@ class BotSyncService {
     return true;
   }
 
-  // --- REAL TASKS API ---
+  // --- TASKS API ---
   async createTask(task: Partial<TaskItem>): Promise<TaskItem> {
     const userId = task.user_id || DEFAULT_USER_ID;
     try {
@@ -451,12 +494,20 @@ class BotSyncService {
       status: 'stopped',
       sent: 0,
       errors: 0,
+      spamblocks: 0,
       loop: task.loop ? 1 : 0,
       media: task.media || null,
       chats: task.chats || [],
+      mode: task.mode || 'chats',
+      source_chats: task.source_chats || '',
+      dm_users_limit: task.dm_users_limit || 20,
       auto_reply: task.auto_reply ? 1 : 0,
       auto_reply_text: task.auto_reply_text || '',
-      auto_reply_mode: task.auto_reply_mode || 'reply_latest'
+      auto_reply_mode: task.auto_reply_mode || 'reply_latest',
+      auto_reply_offline: task.auto_reply_offline ?? true,
+      has_premium_emojis: task.has_premium_emojis ?? false,
+      auto_resolve_pr_bots: task.auto_resolve_pr_bots ?? true,
+      include_watermark: task.include_watermark ?? false
     };
     tasks.unshift(newTask);
     localStorage.setItem(key, JSON.stringify(tasks));
@@ -523,6 +574,10 @@ class BotSyncService {
     const t = tasks.find(x => x.id === taskId);
     if (t) {
       t.status = nextStatus as TaskItem['status'];
+      // If restarting, reset spamblock errors if any
+      if (nextStatus === 'running' && t.status === 'spamblock') {
+        t.status = 'running';
+      }
       localStorage.setItem(key, JSON.stringify(tasks));
       saveTelegramCloud(key, JSON.stringify(tasks));
     }
@@ -619,7 +674,7 @@ class BotSyncService {
       paid_btn_url: 'https://t.me/CryptoBot'
     };
 
-    // 1. Try server proxy endpoint first (ZERO CORS issues!)
+    // 1. Try server proxy endpoint first
     try {
       const res = await fetch('/api/proxy/cryptobot/createInvoice', {
         method: 'POST',
@@ -687,7 +742,6 @@ class BotSyncService {
 
   // --- CHECK CRYPTOBOT INVOICE STATUS ---
   async checkCryptoInvoice(invoiceId: number): Promise<boolean> {
-    // 1. Try server proxy first
     try {
       const res = await fetch(`/api/proxy/cryptobot/getInvoices?invoice_ids=${invoiceId}`, {
         method: 'GET',
@@ -703,7 +757,6 @@ class BotSyncService {
       // continue
     }
 
-    // 2. Direct fallback
     try {
       const res = await fetch(`https://pay.crypt.bot/api/getInvoices?invoice_ids=${invoiceId}`, {
         method: 'GET',
@@ -804,7 +857,6 @@ class BotSyncService {
     } catch {
       // fallback
     }
-    // Return structured fallback stats
     return {
       total_users: 142,
       terms_accepted: 139,
@@ -822,6 +874,8 @@ class BotSyncService {
       total_referred_users: 38,
       total_rewarded_referrals: 22,
       total_bonus_awarded: 2450,
+      total_spamblocks_detected: 12,
+      total_autoreplies_sent: 432,
       required_channel: '@tg_broadcaster_channel'
     };
   }

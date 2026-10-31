@@ -15,6 +15,7 @@ import { ConnectionHelpModal } from './components/ConnectionHelpModal';
 import { ReferralModal } from './components/ReferralModal';
 import { TermsModal } from './components/TermsModal';
 import { AdminStatsModal } from './components/AdminStatsModal';
+import { AutoresponderModal } from './components/AutoresponderModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
@@ -38,6 +39,7 @@ export default function App() {
   const [isReferralOpen, setIsReferralOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isAdminStatsOpen, setIsAdminStatsOpen] = useState(false);
+  const [isAutoresponderOpen, setIsAutoresponderOpen] = useState(false);
 
   // Initialize
   useEffect(() => {
@@ -222,6 +224,7 @@ export default function App() {
               setIsAddAccountOpen(true);
             }}
             onOpenReferrals={() => setIsReferralOpen(true)}
+            onOpenAutoresponder={() => setIsAutoresponderOpen(true)}
           />
         )}
 
@@ -265,7 +268,7 @@ export default function App() {
         tasksCount={tasks.length}
       />
 
-      {/* Initial Mandatory Terms Acceptance Prompt (if not accepted yet) */}
+      {/* Initial Mandatory Terms Acceptance Prompt */}
       {user.terms_accepted === 0 && (
         <TermsModal
           isInitialPrompt={true}
@@ -310,6 +313,14 @@ export default function App() {
           initialMode={addAccountMode}
           onClose={() => setIsAddAccountOpen(false)}
           onSuccess={handleAccountAdded}
+        />
+      )}
+
+      {isAutoresponderOpen && (
+        <AutoresponderModal
+          user={user}
+          onClose={() => setIsAutoresponderOpen(false)}
+          onUpdateUser={(updated) => setUser(updated)}
         />
       )}
 
