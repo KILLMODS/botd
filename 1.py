@@ -27,7 +27,7 @@ from telethon.errors import (
     UserBannedInChannelError, UserDeactivatedBanError,
     SessionPasswordNeededError, PhoneCodeInvalidError, PhoneCodeExpiredError,
     SendCodeUnavailableError, PhoneNumberBannedError, ApiIdInvalidError,
-    UserNotParticipantError
+    UserNotParticipantError, MessageNotModifiedError
 )
 
 # ─────────────────────────────────────────────────────
@@ -1911,12 +1911,32 @@ def register_handlers(bot: TelegramClient):
         except Exception:
             pass
 
+    # ── SAFE EDIT HELPER FOR TELETHON ──
+    async def safe_edit(e, text, buttons=None, link_preview=True):
+        try:
+            await e.edit(text, buttons=buttons, link_preview=link_preview)
+        except MessageNotModifiedError:
+            pass
+        except Exception as ex:
+            log.debug(f"safe_edit notice: {ex}")
+
     # ── CALLBACK QUERY ОБРАБОТЧИК ──
     @bot.on(events.CallbackQuery())
     async def callback_handler(e):
+        try:
+            await _handle_callback(e)
+        except MessageNotModifiedError:
+            pass
+        except Exception as ex:
+            log.error(f"Callback query handler error: {ex}", exc_info=True)
+
+    async def _handle_callback(e):
         uid = e.sender_id
         data = e.data.decode("utf-8")
-        await e.answer()
+        try:
+            await e.answer()
+        except Exception:
+            pass
 
         # Принятие условий пользования
         if data == "accept_terms":
