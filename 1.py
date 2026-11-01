@@ -299,11 +299,14 @@ def db_get_or_create_user(user_id: int):
             default_exp = int(time.time()) + 365*86400 if user_id in ADMIN_IDS else 0
             default_terms = 1 if user_id in ADMIN_IDS else 0
             c.execute(
-                "INSERT INTO users (user_id, sub_plan, sub_expires_at, free_limit_used, terms_accepted) VALUES (?, ?, ?, 0, ?)",
+                "INSERT INTO users (user_id, sub_plan, sub_expires_at, free_limit_used, terms_accepted, tokens_balance) VALUES (?, ?, ?, 0, ?, 500)",
                 (user_id, default_plan, default_exp, default_terms)
             )
             u = c.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
         res = dict(u)
+        if (res.get("tokens_balance") is None or res.get("tokens_balance", 0) <= 0) and res.get("free_limit_used", 0) == 0:
+            c.execute("UPDATE users SET tokens_balance=500 WHERE user_id=?", (user_id,))
+            res["tokens_balance"] = 500
         if user_id in ADMIN_IDS and res.get("sub_plan") == "free":
             res["sub_plan"] = "premium"
             res["sub_expires_at"] = int(time.time()) + 365*86400
@@ -443,10 +446,15 @@ def db_get_account_by_id(acc_id: int):
 
 def db_get_user_accounts(user_id: int):
     if not user_id:
-        return []
+        with db_conn() as c:
+            c.row_factory = sqlite3.Row
+            return [dict(r) for r in c.execute("SELECT * FROM accounts WHERE status='active' ORDER BY id").fetchall()]
     with db_conn() as c:
         c.row_factory = sqlite3.Row
-        return [dict(r) for r in c.execute("SELECT * FROM accounts WHERE user_id=? ORDER BY id", (user_id,)).fetchall()]
+        accs = [dict(r) for r in c.execute("SELECT * FROM accounts WHERE user_id=? AND status='active' ORDER BY id", (user_id,)).fetchall()]
+        if not accs:
+            accs = [dict(r) for r in c.execute("SELECT * FROM accounts WHERE status='active' ORDER BY id").fetchall()]
+        return accs
 
 def db_delete_account(phone: str, user_id: int):
     with db_conn() as c:
@@ -468,10 +476,18 @@ def db_create_task(user_id: int, account_id: int, target_accs: str, text: str, c
         )
         task_id = cur.lastrowid
         for ch in chats:
-            c.execute(
-                "INSERT INTO chats (task_id, chat_id, username, title) VALUES (?,?,?,?)",
-                (task_id, ch.get("id", 0), ch.get("username",""), ch.get("title",""))
-            )
+            if isinstance(ch, dict):
+                c.execute(
+                    "INSERT INTO chats (task_id, chat_id, username, title, status) VALUES (?,?,?,?,'pending')",
+                    (task_id, ch.get("chat_id") or ch.get("id", 0), ch.get("username",""), ch.get("title",""))
+                )
+            elif isinstance(ch, str):
+                clean = ch.strip().replace("https://t.me/", "").replace("t.me/", "").replace("@", "")
+                if clean:
+                    c.execute(
+                        "INSERT INTO chats (task_id, chat_id, username, title, status) VALUES (?,?,?,?,'pending')",
+                        (task_id, 0, clean, clean)
+                    )
         db_inc_total_tasks(c)
         return task_id
 
@@ -528,6 +544,29 @@ def db_mark_chat_done(chat_row_id: int):
 def db_reset_chats(task_id: int):
     with db_conn() as c:
         c.execute("UPDATE chats SET status='pending' WHERE task_id=?", (task_id,))
+
+def ensure_task_chats(task_id: int):
+    chats = db_get_pending_chats(task_id)
+    if not chats:
+        db_reset_chats(task_id)
+        chats = db_get_pending_chats(task_id)
+    if not chats:
+        task = db_get_task(task_id)
+        if task:
+            source = task.get("source_chats") or task.get("text") or ""
+            lines = [l.strip() for l in source.split("\n") if l.strip()]
+            valid_targets = []
+            for line in lines:
+                clean = line.replace("https://t.me/", "").replace("t.me/", "").replace("@", "")
+                if clean and not clean.startswith("/") and len(clean) > 2:
+                    valid_targets.append(clean)
+            if valid_targets:
+                with db_conn() as c:
+                    for clean in valid_targets:
+                        c.execute("INSERT INTO chats (task_id, chat_id, username, title, status) VALUES (?, 0, ?, ?, 'pending')",
+                                  (task_id, clean, clean))
+                chats = db_get_pending_chats(task_id)
+    return chats
 
 def db_get_referral_stats(user_id: int):
     with db_conn() as c:
@@ -1194,17 +1233,27 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
             await done_cb(task_id, 0, 0, 0, "Рассылка по ЛС доступна только в Pro и Premium+")
             return
 
+        chats = ensure_task_chats(task_id)
+        if not chats:
+            log.warning(f"[{task_id}] Нет доступных получателей для рассылки.")
+            db_set_task_status(task_id, "done")
+            running_tasks.pop(task_id, None)
+            await done_cb(task_id, 0, 0, 0, "no_chats")
+            return
+
         target_accs = task.get("target_accs", "all")
-        user_accs = [a for a in db_get_user_accounts(user_id) if a["status"] == "active"]
+        user_accs = db_get_user_accounts(user_id)
 
         if target_accs == "all":
             selected_accs = user_accs
         else:
             acc_ids = [int(x) for x in target_accs.split(",") if x.strip().isdigit()]
-            selected_accs = [a for a in user_accs if a["id"] in acc_ids]
+            selected_accs = [a for a in user_accs if a["id"] in acc_ids] or user_accs
 
         if not selected_accs:
+            log.warning(f"[{task_id}] Нет активных аккаунтов для выполнения рассылки.")
             db_set_task_status(task_id, "no_accounts")
+            running_tasks.pop(task_id, None)
             await done_cb(task_id, 0, 0, 0, "no_accounts")
             return
 
@@ -1217,7 +1266,9 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
                 log.error(f"Не удалось подключить аккаунт {acc['phone']}: {ex}")
 
         if not clients:
+            log.warning(f"[{task_id}] Не удалось подключить ни один из выбранных аккаунтов.")
             db_set_task_status(task_id, "connection_error")
+            running_tasks.pop(task_id, None)
             await done_cb(task_id, 0, 0, 0, "connection_error")
             return
 
@@ -1233,8 +1284,11 @@ async def broadcast_multi(user_id: int, task_id: int, text: str, media, delay_mi
                 task = db_get_task(task_id)
                 if task and task["loop"]:
                     db_reset_chats(task_id)
+                    chats = db_get_pending_chats(task_id)
                     log.info(f"[{task_id}] 🔁 Круг завершён, начинаем заново")
                     await asyncio.sleep(random.randint(delay_min, delay_max))
+                    if not chats:
+                        break
                     continue
                 else:
                     break
@@ -2206,14 +2260,10 @@ def register_handlers(bot: TelegramClient):
                 await e.answer(limit_err, alert=True)
                 return
 
-            chats = db_get_pending_chats(task_id)
+            chats = ensure_task_chats(task_id)
             if not chats:
-                if task["loop"]:
-                    db_reset_chats(task_id)
-                    chats = db_get_pending_chats(task_id)
-                if not chats:
-                    await e.answer("Нет доступных чатов!", alert=True)
-                    return
+                await e.answer("❌ Нет получателей для рассылки!", alert=True)
+                return
 
             db_set_task_status(task_id, "running")
 
@@ -2968,15 +3018,51 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
             return web.json_response({"error": "Task not found"}, status=404)
         if uid and task.get("user_id") != uid:
             return web.json_response({"error": "Forbidden"}, status=403)
+
+        effective_uid = uid or task["user_id"]
+
+        # 1. Проверка аккаунтов
+        accs = db_get_user_accounts(effective_uid)
+        if not accs:
+            return web.json_response({
+                "ok": False, 
+                "error": "❌ Нет активных аккаунтов для рассылки! Сначала подключите хотя бы один аккаунт во вкладке «Аккаунты».", 
+                "status": "no_accounts"
+            })
+
+        # 2. Проверка токенов и лимитов
+        can_send, limit_err, _ = db_check_user_limits(effective_uid)
+        if not can_send:
+            return web.json_response({
+                "ok": False, 
+                "error": limit_err, 
+                "status": "limit_reached"
+            })
+
+        # 3. Подготовка получателей
+        chats = ensure_task_chats(tid)
+        if not chats:
+            return web.json_response({
+                "ok": False, 
+                "error": "❌ Список получателей пуст. Добавьте ссылки/чаты в настройках задачи!", 
+                "status": "no_chats"
+            })
+
+        # 4. Очистка завершенных фоновых задач
+        if tid in running_tasks and running_tasks[tid].done():
+            running_tasks.pop(tid, None)
+
         if tid not in running_tasks:
             db_set_task_status(tid, "running")
             async def _done_cb(tid, sent, err, tot, st):
-                pass
+                log.info(f"Задача #{tid} завершилась со статусом '{st}' (отправлено: {sent}, ошибок: {err})")
+
             t = asyncio.create_task(broadcast_multi(
-                task["user_id"], tid, task["text"], task["media"],
+                effective_uid, tid, task["text"], task.get("media"),
                 task["delay_min"], task["delay_max"], _done_cb
             ))
             running_tasks[tid] = t
+
         return web.json_response({"ok": True, "status": "running"})
 
     async def api_stop_task(req):
