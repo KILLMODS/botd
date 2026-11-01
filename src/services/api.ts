@@ -12,14 +12,14 @@ export const TOKEN_PACKAGES: TokenPackage[] = [
     tokens: 100,
     price_stars: 15,
     price_usd: 0.29,
-    description: '100 сообщений для быстрой тестовой рассылки'
+    description: '100 BLX токенов для тестовой рассылки'
   },
   {
     id: 'pack_500',
     tokens: 500,
     price_stars: 49,
     price_usd: 0.99,
-    description: '500 сообщений для стандартной кампании'
+    description: '500 BLX токенов для стандартной кампании'
   },
   {
     id: 'pack_1500',
@@ -27,7 +27,7 @@ export const TOKEN_PACKAGES: TokenPackage[] = [
     price_stars: 129,
     price_usd: 2.49,
     popular: true,
-    description: '1 500 сообщений — оптимальный запас'
+    description: '1 500 BLX токенов — оптимальный запас'
   },
   {
     id: 'pack_5000',
@@ -35,7 +35,7 @@ export const TOKEN_PACKAGES: TokenPackage[] = [
     price_stars: 389,
     price_usd: 6.99,
     discount: '-20%',
-    description: '5 000 сообщений для активного трафика'
+    description: '5 000 BLX токенов для активного трафика'
   },
   {
     id: 'pack_15000',
@@ -43,7 +43,7 @@ export const TOKEN_PACKAGES: TokenPackage[] = [
     price_stars: 899,
     price_usd: 15.99,
     discount: '-35%',
-    description: '15 000 сообщений оптом по лучшей цене'
+    description: '15 000 BLX токенов оптом по лучшей цене'
   }
 ];
 
@@ -61,12 +61,12 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     features: [
       'Подключение любых Telegram аккаунтов',
       'Бесконечные дневные лимиты (∞)',
-      '1 токен = 1 сообщение',
-      'Токены покупаются в магазине',
+      '1 BLX = 1 сообщение',
+      'Токены BLX покупаются в магазине',
       '🛡️ Автопрохождение проверок PR-ботов',
       '🆓 Вотермарка в конце сообщений',
       'Задержка от 10 сек',
-      '+50 токенов за каждого реферала'
+      '+50 BLX за каждого реферала'
     ]
   },
   pro: {
@@ -81,9 +81,10 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     popular: true,
     badge: 'Выгодный Pro',
     features: [
+      '🎁 +500 BLX токенов при старте подписки',
       'Подключение любых Telegram аккаунтов',
       'Бесконечные дневные лимиты (∞)',
-      '1 токен = 1 сообщение',
+      '1 BLX = 1 сообщение',
       '🚫 Чистые посты без вотермарок',
       '💬 Рассылка по ЛС участникам групп (PRO)',
       '✨ Поддержка Telegram Premium эмодзи',
@@ -91,7 +92,7 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
       '🛑 Анализ и защита от спам-блока',
       'Быстрая задержка от 5 сек',
       'Бесконечный режим рассылки (Loop)',
-      '+100 токенов за каждого реферала'
+      '+100 BLX за каждого реферала'
     ]
   },
   premium: {
@@ -106,9 +107,10 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     popular: true,
     badge: 'Выгодный Pro',
     features: [
+      '🎁 +500 BLX токенов при старте подписки',
       'Подключение любых Telegram аккаунтов',
       'Бесконечные дневные лимиты (∞)',
-      '1 токен = 1 сообщение',
+      '1 BLX = 1 сообщение',
       '🚫 Чистые посты без вотермарок',
       '🛡️ Автопрохождение PR/Guard-ботов'
     ]
@@ -889,6 +891,7 @@ class BotSyncService {
     const user = await this.getUser(userId);
     user.sub_plan = planKey;
     user.sub_expires_at = Math.floor(Date.now() / 1000) + days * 86400;
+    user.tokens_balance = (user.tokens_balance ?? 0) + 500;
     localStorage.setItem(key, JSON.stringify(user));
     saveTelegramCloud(key, JSON.stringify(user));
     return user;

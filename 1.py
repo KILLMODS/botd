@@ -87,11 +87,11 @@ SUBSCRIPTION_PLANS = {
 }
 
 TOKEN_PACKAGES = {
-    "pack_100": {"tokens": 100, "price_stars": 15, "price_usd": 0.29, "name": "100 сообщений"},
-    "pack_500": {"tokens": 500, "price_stars": 49, "price_usd": 0.99, "name": "500 сообщений"},
-    "pack_1500": {"tokens": 1500, "price_stars": 129, "price_usd": 2.49, "name": "1 500 сообщений"},
-    "pack_5000": {"tokens": 5000, "price_stars": 389, "price_usd": 6.99, "name": "5 000 сообщений"},
-    "pack_15000": {"tokens": 15000, "price_stars": 899, "price_usd": 15.99, "name": "15 000 сообщений"}
+    "pack_100": {"tokens": 100, "price_stars": 15, "price_usd": 0.29, "name": "100 BLX"},
+    "pack_500": {"tokens": 500, "price_stars": 49, "price_usd": 0.99, "name": "500 BLX"},
+    "pack_1500": {"tokens": 1500, "price_stars": 129, "price_usd": 2.49, "name": "1 500 BLX"},
+    "pack_5000": {"tokens": 5000, "price_stars": 389, "price_usd": 6.99, "name": "5 000 BLX"},
+    "pack_15000": {"tokens": 15000, "price_stars": 899, "price_usd": 15.99, "name": "15 000 BLX"}
 }
 
 TERMS_SUMMARY_TEXT = (
@@ -339,7 +339,8 @@ def db_get_all_users():
 def db_update_user_sub(user_id: int, plan: str, duration_days: int = 30, method: str = "admin", amount: float = 0.0):
     expires_at = int(time.time()) + (duration_days * 86400) if duration_days > 0 else 0
     with db_conn() as c:
-        c.execute("UPDATE users SET sub_plan=?, sub_expires_at=? WHERE user_id=?", (plan, expires_at, user_id))
+        # При старте/активации подписки начисляется +500 BLX токенов
+        c.execute("UPDATE users SET sub_plan=?, sub_expires_at=?, tokens_balance = COALESCE(tokens_balance, 0) + 500 WHERE user_id=?", (plan, expires_at, user_id))
         c.execute("INSERT INTO sub_purchases (user_id, plan, method, amount, created_at) VALUES (?, ?, ?, ?, ?)",
                   (user_id, plan, method, amount, int(time.time())))
 
@@ -363,9 +364,9 @@ def db_check_user_limits(user_id: int) -> tuple[bool, str, dict]:
     plan = SUBSCRIPTION_PLANS.get(plan_key, SUBSCRIPTION_PLANS["free"]).copy()
     tokens = u.get("tokens_balance", 0)
 
-    # Дневные лимиты бесконечные. Отправка определяется балансом токенов (1 токен = 1 сообщение)
+    # Дневные лимиты бесконечные. Отправка определяется балансом токенов BLX (1 BLX = 1 сообщение)
     if tokens <= 0:
-        return False, "⚠️ У вас закончились токены (сообщения). Пополните баланс в магазине токенов, чтобы продолжить рассылку!", plan
+        return False, "⚠️ У вас закончились токены BLX (сообщения). Пополните баланс в магазине токенов BLX, чтобы продолжить рассылку!", plan
 
     return True, "", plan
 
@@ -1553,12 +1554,12 @@ def profile_text(user_id: int) -> str:
         f"👤 **Личный кабинет**\n\n"
         f"🆔 ID: `{user_id}`\n"
         f"⭐ Тариф: **{plan['name']}** ({expires_str})\n\n"
-        f"🪙 **Баланс токенов (сообщений):**\n"
-        f"• Доступно токенов: `{tokens:,}` шт. (`{tokens:,}` сообщений)\n"
+        f"🪙 **Баланс BLX токенов:**\n"
+        f"• Доступно: `{tokens:,}` BLX (`{tokens:,}` сообщений)\n"
         f"• ⚡ Дневной лимит: **Бесконечный (∞)**\n"
         f"• 📱 Подключено аккаунтов: `{len(accs)}` шт.\n"
         f"• 📨 Создано задач: `{len(tasks)}`\n"
-        f"• 🎁 Реферальные бонусы: `+{bonus}` токенов"
+        f"• 🎁 Реферальные бонусы: `+{bonus}` BLX"
     )
 
 def referral_text(bot_username: str, user_id: int) -> str:
@@ -1569,15 +1570,15 @@ def referral_text(bot_username: str, user_id: int) -> str:
 
     return (
         f"👥 **Реферальная программа**\n\n"
-        f"Приглашайте друзей и получайте бонусные сообщения к своему лимиту!\n\n"
+        f"Приглашайте друзей и получайте бонусные BLX токены к своему лимиту!\n\n"
         f"🎯 **Ваша персональная ссылка:**\n`{ref_link}`\n\n"
         f"💡 **Награды за подключение аккаунта рефералом:**\n"
-        f"• На тарифе Start: **+50 сообщений**\n"
-        f"• На тарифе Pro: **+100 сообщений**\n\n"
+        f"• На тарифе Start: **+50 BLX**\n"
+        f"• На тарифе Pro: **+100 BLX**\n\n"
         f"📊 **Ваша статистика:**\n"
         f"• Перешли по ссылке: `{stats['total_invited']}` чел.\n"
         f"• Подключили аккаунт: `{stats['active_invited']}` чел.\n"
-        f"• Начислено бонусов: `+{stats['bonus_messages']}` сообщ."
+        f"• Начислено бонусов: `+{stats['bonus_messages']}` BLX"
     )
 
 def task_detail_text(task: dict) -> str:

@@ -102,11 +102,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div className="flex items-center gap-2">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-neutral-300 font-semibold drop-shadow">
-                Баланс токенов (сообщений)
+                Баланс токенов BLX
               </div>
               <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight leading-snug drop-shadow-md">
                 {tokens.toLocaleString('ru-RU')}{' '}
-                <span className="text-xs font-bold text-amber-300">токенов</span>
+                <span className="text-xs font-bold text-amber-300">BLX</span>
               </div>
             </div>
             <button
@@ -115,7 +115,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 triggerHaptic('light');
                 setShowTokenInfo(true);
               }}
-              title="Информация о токенах"
+              title="Информация о токенах BLX"
               className="w-7 h-7 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur-md border border-white/25 flex items-center justify-center text-neutral-200 hover:text-white transition-all shadow-sm"
             >
               <Info className="w-3.5 h-3.5" />
@@ -129,7 +129,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               triggerHaptic('medium');
               onOpenShop();
             }}
-            title="Магазин токенов"
+            title="Магазин BLX"
             className="w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 shadow-[0_4px_16px_rgba(0,0,0,0.5)] text-white flex items-center justify-center active:scale-90 transition-all"
           >
             <ShoppingBag className="w-5 h-5 text-white drop-shadow" />
@@ -144,7 +144,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <div className="flex items-center justify-between pb-2 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🪙</span>
-                <h4 className="text-sm font-bold text-white">Токены и сообщения</h4>
+                <h4 className="text-sm font-bold text-white">Токены BLX</h4>
               </div>
               <button
                 onClick={() => setShowTokenInfo(false)}
@@ -155,21 +155,28 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
 
             <p className="text-xs text-neutral-300 leading-relaxed">
-              <strong>Токены — это ваши сообщения:</strong>
+              <strong>Токены BLX — это ваши сообщения:</strong>
             </p>
 
             <div className="space-y-2 text-xs">
               <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
                 <div className="font-semibold text-white">Прямой расчёт:</div>
                 <div className="text-neutral-300 mt-0.5">
-                  • <strong>1 токен = 1 отправленное сообщение</strong>
+                  • <strong>1 BLX = 1 отправленное сообщение</strong>
                 </div>
               </div>
 
               <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/25">
-                <div className="font-semibold text-amber-300">Бесконечные лимиты:</div>
+                <div className="font-semibold text-amber-300">Стартовый бонус:</div>
                 <div className="text-neutral-200 mt-0.5">
-                  • Никаких ограничений в день. Вы можете отправлять столько сообщений, сколько токенов на вашем балансе!
+                  • При старте подписки начисляется <strong>+500 BLX токенов</strong>!
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-emerald-400/10 border border-emerald-400/25">
+                <div className="font-semibold text-emerald-300">Бесконечные лимиты:</div>
+                <div className="text-neutral-200 mt-0.5">
+                  • Вы можете отправлять столько сообщений, сколько BLX токенов на балансе!
                 </div>
               </div>
             </div>
@@ -182,7 +189,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               className="w-full py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Купить токены в магазине</span>
+              <span>Купить токены BLX в магазине</span>
             </button>
           </div>
         </div>

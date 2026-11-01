@@ -142,7 +142,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({ user, onClose }) =
                   <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-full bg-white/10 text-neutral-300 font-bold">Ваш тариф</span>
                 )}
               </div>
-              <span className="font-bold text-white font-mono">+50 сообщений</span>
+              <span className="font-bold text-white font-mono">+50 BLX</span>
             </div>
 
             <div className={`flex items-center justify-between p-2.5 rounded-xl border ${
@@ -154,7 +154,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({ user, onClose }) =
                   <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold">Ваш тариф</span>
                 )}
               </div>
-              <span className="font-bold text-blue-400 font-mono">+100 сообщений</span>
+              <span className="font-bold text-blue-400 font-mono">+100 BLX</span>
             </div>
           </div>
 

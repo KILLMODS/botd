@@ -164,8 +164,8 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-amber-300" />
             <div>
-              <div className="text-xs font-semibold text-white">Токены — это сообщения</div>
-              <div className="text-[11px] text-neutral-400">1 токен = 1 сообщение • Лимиты в день: ∞</div>
+              <div className="text-xs font-semibold text-white">Токены BLX — это сообщения</div>
+              <div className="text-[11px] text-neutral-400">1 BLX = 1 сообщение • Лимиты в день: ∞</div>
             </div>
           </div>
 

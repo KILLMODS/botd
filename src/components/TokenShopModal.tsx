@@ -146,13 +146,13 @@ export const TokenShopModal: React.FC<TokenShopModalProps> = ({
             <div className="text-lg font-bold text-white font-mono flex items-center gap-1.5 mt-0.5">
               <Coins className="w-4 h-4 text-amber-300" />
               <span>{(user.tokens_balance ?? 0).toLocaleString('ru-RU')}</span>
-              <span className="text-xs font-medium text-amber-300">токенов</span>
+              <span className="text-xs font-bold text-amber-300">BLX</span>
             </div>
           </div>
           <div className="text-right">
             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-400/25">
               <Zap className="w-3 h-3 text-emerald-300" />
-              1 токен = 1 смс
+              1 BLX = 1 смс
             </span>
             <div className="text-[10px] text-neutral-400 mt-1">
               Дневной лимит: Бесконечный (∞)
@@ -163,7 +163,7 @@ export const TokenShopModal: React.FC<TokenShopModalProps> = ({
         {/* Package Selector */}
         <div className="mt-4 space-y-2">
           <label className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider px-1">
-            Выберите объём токенов
+            Выберите объём BLX токенов
           </label>
           <div className="grid grid-cols-2 gap-2">
             {TOKEN_PACKAGES.map((pkg) => {
@@ -197,7 +197,7 @@ export const TokenShopModal: React.FC<TokenShopModalProps> = ({
                   <div>
                     <div className="text-sm font-bold text-white flex items-center gap-1.5 font-mono">
                       <Coins className="w-3.5 h-3.5 text-amber-300" />
-                      <span>{pkg.tokens.toLocaleString('ru-RU')}</span>
+                      <span>{pkg.tokens.toLocaleString('ru-RU')} BLX</span>
                     </div>
                     <div className="text-[11px] text-neutral-300 mt-0.5 font-medium">
                       = {pkg.tokens.toLocaleString('ru-RU')} сообщений
