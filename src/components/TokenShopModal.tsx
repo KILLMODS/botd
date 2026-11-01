@@ -139,27 +139,23 @@ export const TokenShopModal: React.FC<TokenShopModalProps> = ({
           </button>
         </div>
 
-        {/* Current Balance & Multiplier Badge */}
+        {/* Current Balance & Infinite Limits Badge */}
         <div className="mt-3.5 p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between">
           <div>
             <div className="text-[11px] text-neutral-400">Ваш текущий баланс</div>
             <div className="text-lg font-bold text-white font-mono flex items-center gap-1.5 mt-0.5">
               <Coins className="w-4 h-4 text-amber-300" />
-              <span>{(user.tokens_balance ?? 500).toLocaleString('ru-RU')}</span>
-              <span className="text-xs font-medium text-neutral-400">BLX</span>
+              <span>{(user.tokens_balance ?? 0).toLocaleString('ru-RU')}</span>
+              <span className="text-xs font-medium text-amber-300">токенов</span>
             </div>
           </div>
           <div className="text-right">
-            <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-              isPro 
-                ? 'bg-blue-500/15 text-blue-300 border-blue-400/25'
-                : 'bg-white/10 text-neutral-300 border-white/10'
-            }`}>
-              <Zap className="w-3 h-3 text-amber-300" />
-              {multiplierText}
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-400/25">
+              <Zap className="w-3 h-3 text-emerald-300" />
+              1 токен = 1 смс
             </span>
             <div className="text-[10px] text-neutral-400 mt-1">
-              {isPro ? 'У вас тариф Pro: x2 выгода' : 'Тариф Start: 1 токен = 1 смс'}
+              Дневной лимит: Бесконечный (∞)
             </div>
           </div>
         </div>
@@ -172,7 +168,6 @@ export const TokenShopModal: React.FC<TokenShopModalProps> = ({
           <div className="grid grid-cols-2 gap-2">
             {TOKEN_PACKAGES.map((pkg) => {
               const isSelected = selectedPackage.id === pkg.id;
-              const messagesCount = isPro ? pkg.tokens * 2 : pkg.tokens;
 
               return (
                 <button
@@ -204,8 +199,8 @@ export const TokenShopModal: React.FC<TokenShopModalProps> = ({
                       <Coins className="w-3.5 h-3.5 text-amber-300" />
                       <span>{pkg.tokens.toLocaleString('ru-RU')}</span>
                     </div>
-                    <div className="text-[11px] text-neutral-400 mt-0.5">
-                      ≈ {messagesCount.toLocaleString('ru-RU')} сообщений
+                    <div className="text-[11px] text-neutral-300 mt-0.5 font-medium">
+                      = {pkg.tokens.toLocaleString('ru-RU')} сообщений
                     </div>
                   </div>
 

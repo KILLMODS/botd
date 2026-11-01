@@ -184,8 +184,7 @@ export default function App() {
 
         {/* Smooth drifting ambient colored glows */}
         <div className="absolute -top-36 -left-36 w-[450px] h-[450px] rounded-full bg-blue-600/[0.14] blur-[120px] animate-[ambient-pulse-1_14s_ease-in-out_infinite]" />
-        <div className="absolute top-1/3 -right-36 w-[400px] h-[400px] rounded-full bg-indigo-500/[0.11] blur-[130px] animate-[ambient-pulse-2_18s_ease-in-out_infinite]" />
-        <div className="absolute -bottom-28 left-1/4 w-[380px] h-[380px] rounded-full bg-emerald-500/[0.08] blur-[110px] animate-[ambient-pulse-1_16s_ease-in-out_infinite_reverse]" />
+        <div className="absolute -bottom-28 left-1/4 w-[380px] h-[380px] rounded-full bg-slate-700/[0.06] blur-[110px]" />
 
         {/* Gray Diagonal Animated Stripes Overlay */}
         <div className="absolute inset-0 bg-gray-stripes opacity-80" />

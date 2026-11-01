@@ -56,8 +56,8 @@ AUTH_SESSION_TTL = 600
 SUBSCRIPTION_PLANS = {
     "free": {
         "name": "Start",
-        "max_accounts": 1,
-        "daily_limit": 500,
+        "max_accounts": 999999,
+        "daily_limit": 999999999,
         "min_delay": 10,
         "price_stars": 0,
         "price_usd": 0.0,
@@ -66,31 +66,32 @@ SUBSCRIPTION_PLANS = {
     },
     "pro": {
         "name": "Pro",
-        "max_accounts": 5,
-        "daily_limit": 5000,
+        "max_accounts": 999999,
+        "daily_limit": 999999999,
         "min_delay": 5,
         "price_stars": 69,
         "price_usd": 1.50,
         "ref_bonus": 100,
-        "token_ratio": 2  # 1 токен = 2 сообщения
+        "token_ratio": 1  # 1 токен = 1 сообщение
     },
     "premium": {
         "name": "Pro",
-        "max_accounts": 5,
-        "daily_limit": 5000,
+        "max_accounts": 999999,
+        "daily_limit": 999999999,
         "min_delay": 5,
         "price_stars": 69,
         "price_usd": 1.50,
         "ref_bonus": 100,
-        "token_ratio": 2
+        "token_ratio": 1
     }
 }
 
 TOKEN_PACKAGES = {
-    "pack_1000": {"tokens": 1000, "price_stars": 39, "price_usd": 0.75, "name": "1 000 BLX"},
-    "pack_3500": {"tokens": 3500, "price_stars": 129, "price_usd": 2.49, "name": "3 500 BLX"},
-    "pack_8000": {"tokens": 8000, "price_stars": 289, "price_usd": 5.49, "name": "8 000 BLX"},
-    "pack_15000": {"tokens": 15000, "price_stars": 469, "price_usd": 8.99, "name": "15 000 BLX"}
+    "pack_100": {"tokens": 100, "price_stars": 15, "price_usd": 0.29, "name": "100 сообщений"},
+    "pack_500": {"tokens": 500, "price_stars": 49, "price_usd": 0.99, "name": "500 сообщений"},
+    "pack_1500": {"tokens": 1500, "price_stars": 129, "price_usd": 2.49, "name": "1 500 сообщений"},
+    "pack_5000": {"tokens": 5000, "price_stars": 389, "price_usd": 6.99, "name": "5 000 сообщений"},
+    "pack_15000": {"tokens": 15000, "price_stars": 899, "price_usd": 15.99, "name": "15 000 сообщений"}
 }
 
 TERMS_SUMMARY_TEXT = (
@@ -222,11 +223,14 @@ def db_init():
             "ar_trigger": "TEXT DEFAULT 'offline_only'",
             "ar_delay": "INTEGER DEFAULT 2",
             "ar_replies_count": "INTEGER DEFAULT 0",
-            "tokens_balance": "INTEGER DEFAULT 500"
+            "tokens_balance": "INTEGER DEFAULT 0"
         }
         for col, col_def in new_user_cols.items():
             if col not in user_cols:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {col_def}")
+
+        # Сброс старых автоматических 500 токенов (токены = сообщения, нужно покупать)
+        c.execute("UPDATE users SET tokens_balance = 0 WHERE tokens_balance = 500")
 
         acc_cols = [r[1] for r in c.execute("PRAGMA table_info(accounts)").fetchall()]
         if "user_id" not in acc_cols:
@@ -357,25 +361,23 @@ def db_check_user_limits(user_id: int) -> tuple[bool, str, dict]:
         plan_key = "free"
 
     plan = SUBSCRIPTION_PLANS.get(plan_key, SUBSCRIPTION_PLANS["free"]).copy()
-    bonus = u.get("bonus_messages", 0)
-    effective_daily_limit = plan["daily_limit"] + bonus
+    tokens = u.get("tokens_balance", 0)
 
-    if plan_key == "free":
-        if u["free_limit_used"] >= effective_daily_limit:
-            return False, f"⚠️ Вы израсходовали лимит сообщений ({effective_daily_limit}). Приглашайте друзей или оформите подписку!", plan
-    else:
-        if u["daily_sent"] >= effective_daily_limit:
-            return False, f"⚠️ Достигнут дневной лимит отправки ({effective_daily_limit} сообщений/день).", plan
+    # Дневные лимиты бесконечные. Отправка определяется балансом токенов (1 токен = 1 сообщение)
+    if tokens <= 0:
+        return False, "⚠️ У вас закончились токены (сообщения). Пополните баланс в магазине токенов, чтобы продолжить рассылку!", plan
 
     return True, "", plan
 
 def db_inc_user_sent(user_id: int):
-    u = db_get_or_create_user(user_id)
     with db_conn() as c:
-        if u["sub_plan"] == "free":
-            c.execute("UPDATE users SET daily_sent=daily_sent+1, free_limit_used=free_limit_used+1 WHERE user_id=?", (user_id,))
-        else:
-            c.execute("UPDATE users SET daily_sent=daily_sent+1 WHERE user_id=?", (user_id,))
+        c.execute("""
+            UPDATE users 
+            SET tokens_balance = MAX(0, COALESCE(tokens_balance, 0) - 1),
+                daily_sent = daily_sent + 1,
+                free_limit_used = free_limit_used + 1
+            WHERE user_id = ?
+        """, (user_id,))
 
 async def db_reward_referrer_if_eligible(bot: TelegramClient, user_id: int):
     """Начисляет бонус пригласившему пользователю, когда реферал впервые успешно подключает аккаунт."""
@@ -1533,8 +1535,9 @@ def profile_text(user_id: int) -> str:
     accs = db_get_user_accounts(user_id)
     tasks = db_get_user_tasks(user_id)
     bonus = u.get("bonus_messages", 0)
-    tokens = u.get("tokens_balance", 500)
-    ratio = plan.get("token_ratio", 1)
+    tokens = u.get("tokens_balance", 0)
+    if tokens == 500:
+        tokens = 0
 
     expires_str = "Бессрочно (Start)"
     if u["sub_expires_at"] > 0:
@@ -1546,26 +1549,16 @@ def profile_text(user_id: int) -> str:
         else:
             expires_str = "Истекла"
 
-    sent_today = u["free_limit_used"] if plan_key == "free" else u["daily_sent"]
-    total_allowed = plan['daily_limit'] + bonus
-    limit_str = f"{sent_today} / {total_allowed}"
-    rem_limit = max(0, total_allowed - sent_today)
-
-    ar_status = "Включен 🟢" if u.get("ar_enabled", 1) else "Выключен ⚪"
-    ar_replies = u.get("ar_replies_count", 0)
-
     return (
         f"👤 **Личный кабинет**\n\n"
         f"🆔 ID: `{user_id}`\n"
         f"⭐ Тариф: **{plan['name']}** ({expires_str})\n\n"
-        f"💰 **Балансы и ресурсы:**\n"
-        f"• 🪙 Токены BLX: `{tokens:,} BLX` ({ratio} сообщ. за токен)\n"
-        f"• 📊 Лимит на день: `{limit_str}` (осталось: `{rem_limit}`)\n"
-        f"• 🎁 Реферальные бонусы: `+{bonus}` сообщ.\n"
-        f"• 📱 Слоты аккаунтов: `{len(accs)} / {plan['max_accounts']}` шт.\n"
-        f"• ⚡ Мин. задержка: `{plan['min_delay']} сек`\n"
+        f"🪙 **Баланс токенов (сообщений):**\n"
+        f"• Доступно токенов: `{tokens:,}` шт. (`{tokens:,}` сообщений)\n"
+        f"• ⚡ Дневной лимит: **Бесконечный (∞)**\n"
+        f"• 📱 Подключено аккаунтов: `{len(accs)}` шт.\n"
         f"• 📨 Создано задач: `{len(tasks)}`\n"
-        f"• 🤖 Автоответчик в ЛС: `{ar_status}` (ответов: `{ar_replies}`)"
+        f"• 🎁 Реферальные бонусы: `+{bonus}` токенов"
     )
 
 def referral_text(bot_username: str, user_id: int) -> str:
@@ -2025,13 +2018,6 @@ def register_handlers(bot: TelegramClient):
         elif data in ["add_account", "open_add_account_modal"]:
             u = db_get_or_create_user(uid)
             db_set_user_funnel(uid, "clicked_add_acc")
-            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
-            accs = db_get_user_accounts(uid)
-
-            if len(accs) >= plan["max_accounts"]:
-                await e.answer(f"⚠️ На вашем тарифе можно добавить не более {plan['max_accounts']} аккаунтов!", alert=True)
-                return
-
             await e.edit(
                 "👤 **Добавить профиль**\n\n"
                 "🔒 Аккаунт используется **ТОЛЬКО** для авторассылки. Личная переписка не читается и не сохраняется.\n\n"
@@ -2052,13 +2038,6 @@ def register_handlers(bot: TelegramClient):
         elif data == "add_account_session":
             u = db_get_or_create_user(uid)
             db_set_user_funnel(uid, "clicked_add_acc")
-            plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
-            accs = db_get_user_accounts(uid)
-
-            if len(accs) >= plan["max_accounts"]:
-                await e.answer(f"⚠️ На вашем тарифе можно добавить не более {plan['max_accounts']} аккаунтов!", alert=True)
-                return
-
             states[uid] = {"state": "session_string"}
             await e.edit(
                 "📁 **Добавление аккаунта по готовой session**\n\n"
@@ -2776,7 +2755,10 @@ def init_api_routes(app: web.Application, bot: TelegramClient):
         ref_stats = db_get_referral_stats(uid)
         u["referrals_count"] = ref_stats["total_invited"]
         u["referrals_active"] = ref_stats["active_invited"]
-        u["tokens_balance"] = u.get("tokens_balance", 500) if u.get("tokens_balance") is not None else 500
+        tokens_val = u.get("tokens_balance", 0) if u.get("tokens_balance") is not None else 0
+        if tokens_val == 500:
+            tokens_val = 0
+        u["tokens_balance"] = tokens_val
         u["auto_responder"] = {
             "enabled": bool(u.get("ar_enabled", 1)),
             "text": u.get("ar_text") or "Здравствуйте! Сейчас я не в сети, отвечу на ваше сообщение, как только освобожусь.",

@@ -8,34 +8,42 @@ export const BOTHOST_URL = 'https://bot-1793274038-8713-black-kot198.bothost.tec
 
 export const TOKEN_PACKAGES: TokenPackage[] = [
   {
-    id: 'pack_1000',
-    tokens: 1000,
-    price_stars: 39,
-    price_usd: 0.75,
-    description: 'Стартовый набор токенов для рассылок'
+    id: 'pack_100',
+    tokens: 100,
+    price_stars: 15,
+    price_usd: 0.29,
+    description: '100 сообщений для быстрой тестовой рассылки'
   },
   {
-    id: 'pack_3500',
-    tokens: 3500,
+    id: 'pack_500',
+    tokens: 500,
+    price_stars: 49,
+    price_usd: 0.99,
+    description: '500 сообщений для стандартной кампании'
+  },
+  {
+    id: 'pack_1500',
+    tokens: 1500,
     price_stars: 129,
     price_usd: 2.49,
     popular: true,
-    description: 'Оптимальный баланс для регулярных кампаний'
+    description: '1 500 сообщений — оптимальный запас'
   },
   {
-    id: 'pack_8000',
-    tokens: 8000,
-    price_stars: 289,
-    price_usd: 5.49,
-    description: 'Для активного трафика и масштабных задач'
+    id: 'pack_5000',
+    tokens: 5000,
+    price_stars: 389,
+    price_usd: 6.99,
+    discount: '-20%',
+    description: '5 000 сообщений для активного трафика'
   },
   {
     id: 'pack_15000',
     tokens: 15000,
-    price_stars: 469,
-    price_usd: 8.99,
-    discount: '-25%',
-    description: 'Максимальный запас с выгодой по оптовой цене'
+    price_stars: 899,
+    price_usd: 15.99,
+    discount: '-35%',
+    description: '15 000 сообщений оптом по лучшей цене'
   }
 ];
 
@@ -43,28 +51,29 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
   free: {
     id: 'free',
     name: 'Start',
-    max_accounts: 1,
-    daily_limit: 500,
+    max_accounts: 999,
+    daily_limit: 999999999,
     min_delay: 10,
     price_stars: 0,
     price_usd: 0.0,
     ref_bonus: 50,
     badge: 'Базовый',
     features: [
-      '1 Telegram аккаунт',
-      '🪙 500 токенов BLX на баланс',
+      'Подключение любых Telegram аккаунтов',
+      'Бесконечные дневные лимиты (∞)',
       '1 токен = 1 сообщение',
+      'Токены покупаются в магазине',
       '🛡️ Автопрохождение проверок PR-ботов',
       '🆓 Вотермарка в конце сообщений',
       'Задержка от 10 сек',
-      '+50 сообщений за каждого реферала'
+      '+50 токенов за каждого реферала'
     ]
   },
   pro: {
     id: 'pro',
     name: 'Pro',
-    max_accounts: 5,
-    daily_limit: 5000,
+    max_accounts: 999,
+    daily_limit: 999999999,
     min_delay: 5,
     price_stars: 69,
     price_usd: 1.50,
@@ -72,23 +81,24 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     popular: true,
     badge: 'Выгодный Pro',
     features: [
-      'До 5 Telegram аккаунтов',
-      '⚡ 1 токен = 2 сообщения! (в 2 раза экономнее)',
+      'Подключение любых Telegram аккаунтов',
+      'Бесконечные дневные лимиты (∞)',
+      '1 токен = 1 сообщение',
+      '🚫 Чистые посты без вотермарок',
       '💬 Рассылка по ЛС участникам групп (PRO)',
       '✨ Поддержка Telegram Premium эмодзи',
-      '🚫 Чистые посты без вотермарок',
-      '🛡️ Автопрохождение PR/Guard-ботов',
+      '🛡️ Усиленный обход PR/Guard-ботов',
       '🛑 Анализ и защита от спам-блока',
       'Быстрая задержка от 5 сек',
-      'Бесконечный режим (Loop)',
-      '+100 сообщений за каждого реферала'
+      'Бесконечный режим рассылки (Loop)',
+      '+100 токенов за каждого реферала'
     ]
   },
   premium: {
     id: 'pro',
     name: 'Pro',
-    max_accounts: 5,
-    daily_limit: 5000,
+    max_accounts: 999,
+    daily_limit: 999999999,
     min_delay: 5,
     price_stars: 69,
     price_usd: 1.50,
@@ -96,12 +106,11 @@ export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
     popular: true,
     badge: 'Выгодный Pro',
     features: [
-      'До 5 Telegram аккаунтов',
-      '⚡ 1 токен = 2 сообщения!',
-      '💬 Рассылка по ЛС участникам групп (PRO)',
-      '✨ Поддержка Telegram Premium эмодзи',
+      'Подключение любых Telegram аккаунтов',
+      'Бесконечные дневные лимиты (∞)',
+      '1 токен = 1 сообщение',
       '🚫 Чистые посты без вотермарок',
-      '🛡️ Автопрохождение проверок PR-ботов'
+      '🛡️ Автопрохождение PR/Guard-ботов'
     ]
   }
 };
@@ -173,7 +182,7 @@ class BotSyncService {
           daily_sent: u.daily_sent || 0,
           last_sent_date: u.last_sent_date || new Date().toISOString().split('T')[0],
           free_limit_used: u.free_limit_used || 0,
-          tokens_balance: typeof u.tokens_balance === 'number' ? u.tokens_balance : 500,
+          tokens_balance: (typeof u.tokens_balance === 'number' && u.tokens_balance !== 500) ? u.tokens_balance : 0,
           terms_accepted: u.terms_accepted ?? 1,
           bonus_messages: u.bonus_messages || 0,
           referred_by: u.referred_by || 0,
@@ -207,7 +216,7 @@ class BotSyncService {
           first_name: fallbackName,
           username: fallbackUsername,
           photo_url: photoUrl,
-          tokens_balance: typeof parsed.tokens_balance === 'number' ? parsed.tokens_balance : 500,
+          tokens_balance: (typeof parsed.tokens_balance === 'number' && parsed.tokens_balance !== 500) ? parsed.tokens_balance : 0,
           terms_accepted: parsed.terms_accepted ?? 1,
           bonus_messages: parsed.bonus_messages || 0,
           auto_responder: parsed.auto_responder || defaultAutoResponder
@@ -231,7 +240,7 @@ class BotSyncService {
           first_name: fallbackName,
           username: fallbackUsername,
           photo_url: photoUrl,
-          tokens_balance: typeof parsed.tokens_balance === 'number' ? parsed.tokens_balance : 500,
+          tokens_balance: (typeof parsed.tokens_balance === 'number' && parsed.tokens_balance !== 500) ? parsed.tokens_balance : 0,
           terms_accepted: parsed.terms_accepted ?? 1,
           bonus_messages: parsed.bonus_messages || 0,
           auto_responder: parsed.auto_responder || defaultAutoResponder
@@ -255,7 +264,7 @@ class BotSyncService {
       daily_sent: 0,
       last_sent_date: new Date().toISOString().split('T')[0],
       free_limit_used: 0,
-      tokens_balance: 500,
+      tokens_balance: 0,
       terms_accepted: 1,
       bonus_messages: 0,
       referrals_count: 0,
@@ -966,7 +975,7 @@ class BotSyncService {
   // --- BLX TOKEN METHODS ---
   async addTokens(userId: number, tokensToAdd: number): Promise<UserProfile> {
     const current = await this.getUser(userId);
-    const updatedTokens = (current.tokens_balance ?? 500) + tokensToAdd;
+    const updatedTokens = (current.tokens_balance ?? 0) + tokensToAdd;
     const updated: UserProfile = {
       ...current,
       tokens_balance: updatedTokens

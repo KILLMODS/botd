@@ -178,7 +178,7 @@ export const AdminStatsModal: React.FC<AdminStatsModalProps> = ({ onClose }) => 
                 {stats?.total_tasks_created || 0}
               </div>
               <div className="text-[10px] text-emerald-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 <span>{stats?.running_tasks_count || 0} в процессе</span>
               </div>
             </div>

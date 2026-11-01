@@ -164,8 +164,8 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-amber-300" />
             <div>
-              <div className="text-xs font-semibold text-white">Даёт 500 токенов BLX</div>
-              <div className="text-[11px] text-neutral-400">1 токен = 1 сообщение</div>
+              <div className="text-xs font-semibold text-white">Токены — это сообщения</div>
+              <div className="text-[11px] text-neutral-400">1 токен = 1 сообщение • Лимиты в день: ∞</div>
             </div>
           </div>
 
@@ -213,7 +213,7 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-1">
-              Максимальная скорость, мультиаккаунты и x2 экономия токенов
+              Максимальная скорость, рассылка по ЛС, чистые посты и обход PR-ботов
             </p>
           </div>
 
@@ -228,16 +228,16 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
           </div>
         </div>
 
-        {/* Pro Multiplier Advantage Highlight */}
+        {/* Pro Advantage Highlight */}
         <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] relative z-10 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-amber-300 shrink-0">
               <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
             </div>
             <div>
-              <div className="text-xs font-semibold text-white">Выгода подписки Pro:</div>
+              <div className="text-xs font-semibold text-white">Преимущества подписки Pro:</div>
               <div className="text-[11px] text-neutral-300">
-                <strong>1 токен = 2 сообщения!</strong> Вдвое больше сообщений за те же токены BLX.
+                Чистые посты без вотермарок, рассылка по участникам (ЛС), анти-спамблок и премиум эмодзи.
               </div>
             </div>
           </div>
@@ -385,15 +385,15 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
           <div className="w-full max-w-xs bg-[#16171e]/90 border border-white/[0.14] rounded-[24px] p-5 shadow-2xl relative text-white space-y-3">
             <div className="flex items-center gap-2 pb-2.5 border-b border-white/[0.08]">
               <Coins className="w-5 h-5 text-amber-300" />
-              <h4 className="text-sm font-bold text-white">Списание токенов BLX</h4>
+              <h4 className="text-sm font-bold text-white">Токены и сообщения</h4>
             </div>
 
             <p className="text-xs text-neutral-300 leading-relaxed">
-              Один токен равен одному сообщению, отправленному в подписке <strong>Start</strong>.
+              <strong>Токены — это сообщения.</strong> 1 токен = 1 отправленное сообщение в рассылке.
             </p>
 
             <div className="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs text-neutral-200">
-              В подписке <strong>Pro</strong> один токен равен <strong>двум сообщениям</strong>. Вы получаете в 2 раза больше отправленных сообщений за то же количество токенов!
+              Дневные лимиты <strong>бесконечные (∞)</strong>. Вы можете запускать кампании любого масштаба, пока на вашем балансе есть токены.
             </div>
 
             <button

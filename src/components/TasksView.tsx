@@ -77,7 +77,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
       case 'running':
         return (
           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             В процессе
           </span>
         );

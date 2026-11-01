@@ -34,9 +34,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [showTokenInfo, setShowTokenInfo] = useState(false);
   const plan = SUBSCRIPTION_PLANS[user.sub_plan] || SUBSCRIPTION_PLANS.free;
   const isPro = user.sub_plan === 'pro' || user.sub_plan === 'premium';
-  const tokens = user.tokens_balance ?? 500;
+  const tokens = user.tokens_balance ?? 0;
   const bonus = user.bonus_messages || 0;
-  const totalLimit = plan.daily_limit + bonus;
 
   let expiresText = 'Бессрочно';
   if (user.sub_expires_at > 0) {
@@ -49,9 +48,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       expiresText = 'Истекла';
     }
   }
-
-  const sentCount = user.sub_plan === 'free' ? user.free_limit_used : user.daily_sent;
-  const limitPercent = Math.min(100, Math.round((sentCount / totalLimit) * 100));
 
   return (
     <div className="space-y-4 pb-28 animate-fade-in select-none">
@@ -100,17 +96,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* Bottom Row: BLX Balance + Shop Button */}
+        {/* Bottom Row: Tokens Balance + Shop Button */}
         <div className="flex items-end justify-between relative z-10 pt-2">
-          {/* Clean BLX Tokens Display with Info Button */}
+          {/* Clean Tokens Display with Info Button */}
           <div className="flex items-center gap-2">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-neutral-300 font-semibold drop-shadow">
-                Баланс токенов
+                Баланс токенов (сообщений)
               </div>
               <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight leading-snug drop-shadow-md">
                 {tokens.toLocaleString('ru-RU')}{' '}
-                <span className="text-xs font-bold text-amber-300">BLX</span>
+                <span className="text-xs font-bold text-amber-300">токенов</span>
               </div>
             </div>
             <button
@@ -119,7 +115,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 triggerHaptic('light');
                 setShowTokenInfo(true);
               }}
-              title="Информация о токенах BLX"
+              title="Информация о токенах"
               className="w-7 h-7 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur-md border border-white/25 flex items-center justify-center text-neutral-200 hover:text-white transition-all shadow-sm"
             >
               <Info className="w-3.5 h-3.5" />
@@ -148,7 +144,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <div className="flex items-center justify-between pb-2 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🪙</span>
-                <h4 className="text-sm font-bold text-white">Токены BLX</h4>
+                <h4 className="text-sm font-bold text-white">Токены и сообщения</h4>
               </div>
               <button
                 onClick={() => setShowTokenInfo(false)}
@@ -159,21 +155,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
 
             <p className="text-xs text-neutral-300 leading-relaxed">
-              Токены <strong>BLX</strong> расходуются на отправку сообщений в ваших рассылках:
+              <strong>Токены — это ваши сообщения:</strong>
             </p>
 
             <div className="space-y-2 text-xs">
               <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
-                <div className="font-semibold text-white">В подписке Start:</div>
-                <div className="text-neutral-400 mt-0.5">
-                  • <strong>1 токен = 1 сообщение</strong>
+                <div className="font-semibold text-white">Прямой расчёт:</div>
+                <div className="text-neutral-300 mt-0.5">
+                  • <strong>1 токен = 1 отправленное сообщение</strong>
                 </div>
               </div>
 
               <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/25">
-                <div className="font-semibold text-amber-300">В подписке Pro:</div>
+                <div className="font-semibold text-amber-300">Бесконечные лимиты:</div>
                 <div className="text-neutral-200 mt-0.5">
-                  • <strong>1 токен = 2 сообщения</strong> (в 2 раза выгоднее).
+                  • Никаких ограничений в день. Вы можете отправлять столько сообщений, сколько токенов на вашем балансе!
                 </div>
               </div>
             </div>
@@ -186,101 +182,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               className="w-full py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Пополнить баланс в магазине</span>
+              <span>Купить токены в магазине</span>
             </button>
           </div>
         </div>
       )}
-
-      {/* FULL BALANCES & RESOURCES SUMMARY (Liquid Glass) */}
-      <div className="liquid-glass-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-300">
-              Балансы и ресурсы аккаунта
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              triggerHaptic('medium');
-              onOpenShop();
-            }}
-            className="text-[11px] text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1"
-          >
-            <span>Пополнить</span>
-            <ChevronRight className="w-3 h-3" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-0.5">
-          {/* Balance Item 1: Tokens */}
-          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex flex-col justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase font-medium">Токены BLX</span>
-            <div className="text-base font-extrabold text-amber-300 font-mono mt-1">
-              {tokens.toLocaleString('ru-RU')}
-            </div>
-            <span className="text-[10px] text-neutral-400 mt-0.5">
-              {isPro ? '2 смс за токен' : '1 смс за токен'}
-            </span>
-          </div>
-
-          {/* Balance Item 2: Daily limit */}
-          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex flex-col justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase font-medium">Лимит на день</span>
-            <div className="text-base font-extrabold text-white font-mono mt-1">
-              {sentCount} <span className="text-xs text-neutral-400 font-normal">/ {totalLimit}</span>
-            </div>
-            <span className="text-[10px] text-emerald-400 mt-0.5">
-              Осталось: {Math.max(0, totalLimit - sentCount)}
-            </span>
-          </div>
-
-          {/* Balance Item 3: Referral Bonus */}
-          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex flex-col justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase font-medium">Реф. бонусы</span>
-            <div className="text-base font-extrabold text-blue-400 font-mono mt-1">
-              +{bonus}
-            </div>
-            <span className="text-[10px] text-neutral-400 mt-0.5">
-              сообщений к лимиту
-            </span>
-          </div>
-
-          {/* Balance Item 4: Account Slots */}
-          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex flex-col justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase font-medium">Слоты номеров</span>
-            <div className="text-base font-extrabold text-white font-mono mt-1">
-              {accounts.length} <span className="text-xs text-neutral-400 font-normal">/ {plan.max_accounts}</span>
-            </div>
-            <span className="text-[10px] text-neutral-400 mt-0.5">
-              {accounts.length >= plan.max_accounts ? 'Лимит слотов' : `Свободно: ${plan.max_accounts - accounts.length}`}
-            </span>
-          </div>
-
-          {/* Balance Item 5: Sub Plan Duration */}
-          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex flex-col justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase font-medium">Срок тарифа</span>
-            <div className="text-base font-extrabold text-white font-mono mt-1 truncate">
-              {expiresText}
-            </div>
-            <span className="text-[10px] text-neutral-400 mt-0.5">
-              Тариф: {plan.name}
-            </span>
-          </div>
-
-          {/* Balance Item 6: Autoresponder */}
-          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex flex-col justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase font-medium">Автоответчик</span>
-            <div className="text-base font-extrabold text-emerald-400 font-mono mt-1">
-              {user.auto_responder?.enabled ? 'Включен' : 'Выключен'}
-            </div>
-            <span className="text-[10px] text-neutral-400 mt-0.5">
-              Ответов: {user.auto_responder?.total_replies_sent || 0}
-            </span>
-          </div>
-        </div>
-      </div>
 
       {/* Referrals Card (Liquid Glass) */}
       <button
@@ -298,11 +204,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-[15px] font-bold text-white tracking-tight">Реферальная программа</span>
               <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white/15 text-neutral-200 border border-white/20">
-                +{plan.ref_bonus} бонусов
+                +{plan.ref_bonus} токенов
               </span>
             </div>
             <p className="text-[12px] text-neutral-400 mt-0.5">
-              Приглашайте друзей и получайте бесплатные сообщения к лимиту
+              Приглашайте друзей и получайте бесплатные токены (сообщения)
             </p>
           </div>
         </div>
@@ -312,7 +218,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </button>
 
-      {/* Plan Details & Limits Card (Liquid Glass) */}
+      {/* Plan Details & Infinite Limits Card (Liquid Glass) */}
       <div className="liquid-glass-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -331,23 +237,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </button>
         </div>
 
-        {/* Progress Bar */}
-        <div className="space-y-1.5 pt-1">
-          <div className="flex justify-between text-[12px]">
-            <span className="text-neutral-400">Отправлено сегодня:</span>
-            <span className="font-mono text-white font-medium">
-              {sentCount} <span className="text-neutral-500">/ {totalLimit}</span>
-            </span>
+        {/* Infinite Limits & Messages Balance Info */}
+        <div className="pt-2 space-y-2 border-t border-white/[0.08]">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-neutral-400">Дневной лимит сообщений:</span>
+            <span className="font-semibold text-emerald-400">Бесконечный (∞)</span>
           </div>
-          <div className="w-full h-2 rounded-full bg-black/50 border border-white/10 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full transition-all duration-300"
-              style={{ width: `${limitPercent}%` }}
-            />
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-neutral-400">Доступно к отправке:</span>
+            <span className="font-mono text-white font-bold">{tokens.toLocaleString('ru-RU')} сообщений</span>
           </div>
           <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-            <span>Срок: {expiresText}</span>
-            {bonus > 0 && <span className="text-amber-300">+{bonus} бонусных</span>}
+            <span>Срок подписки: {expiresText}</span>
+            {bonus > 0 && <span className="text-amber-300">+{bonus} бонусных токенов</span>}
           </div>
         </div>
 
@@ -379,7 +281,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <Smartphone className="w-4 h-4 text-neutral-400" />
           </div>
           <div className="text-2xl font-bold text-white font-mono tracking-tight">
-            {accounts.length} <span className="text-xs text-neutral-500 font-normal">/ {plan.max_accounts}</span>
+            {accounts.length}
           </div>
         </div>
 

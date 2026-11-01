@@ -50,44 +50,19 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         <div>
           <h2 className="text-[17px] font-bold text-white tracking-tight">Подключенные аккаунты</h2>
           <p className="text-[12px] text-neutral-400">
-            {accounts.length} из {plan.max_accounts} по тарифу {plan.name}
+            Всего аккаунтов: {accounts.length}
           </p>
         </div>
-
-        {isLimitReached ? (
-          <button
-            onClick={() => {
-              triggerHaptic('light');
-              onGoToSub();
-            }}
-            className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-400/20 text-amber-300 border border-amber-400/30 transition-all active:scale-95"
-          >
-            Лимит тарифа
-          </button>
-        ) : (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-white/[0.06] text-neutral-300 border border-white/[0.08]">
-            Свободно: {Math.max(0, plan.max_accounts - accounts.length)}
-          </span>
-        )}
       </div>
 
-      {/* Primary Action Button: "Добавить аккаунт" (without (SMS), no string session) */}
+      {/* Primary Action Button: "Добавить аккаунт" */}
       <div>
         <button
           onClick={() => {
-            if (isLimitReached) {
-              triggerHaptic('error');
-              alert(`На тарифе ${plan.name} доступно максимум ${plan.max_accounts} акк. Смените тариф на Pro во вкладке «Тарифы»!`);
-              return;
-            }
             triggerHaptic('medium');
             onOpenAddModal();
           }}
-          className={`w-full py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2.5 font-bold text-sm tracking-wide transition-all shadow-[0_10px_25px_rgba(16,185,129,0.25),inset_0_1px_0_0_rgba(255,255,255,0.25)] ${
-            isLimitReached
-              ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed shadow-none'
-              : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white active:scale-[0.98]'
-          }`}
+          className="w-full py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2.5 font-bold text-sm tracking-wide transition-all shadow-[0_10px_25px_rgba(16,185,129,0.25),inset_0_1px_0_0_rgba(255,255,255,0.25)] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white active:scale-[0.98]"
         >
           <Plus className="w-5 h-5" />
           <span>Добавить аккаунт</span>
