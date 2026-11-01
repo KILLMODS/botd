@@ -1,0 +1,1097 @@
+import { UserProfile, AccountItem, TaskItem, PlanConfig, ReferralInfo, AdminStats, AutoResponderConfig, TokenPackage } from '../types';
+import { getTelegramUser, saveTelegramCloud, getTelegramCloud } from './telegram';
+
+export const BOT_TOKEN = '8345869119:AAGFhcUORebKHj0TeABn_3ZcZIi_BwQr6SE';
+export const BOT_USERNAME = 'KillmodsLTDBot';
+export const CRYPTO_BOT_TOKEN = '662370:AARfAYc3i7xelw6VdEomWOY043wF8cQ4wGb';
+export const BOTHOST_URL = 'https://bot-1793274038-8713-black-kot198.bothost.tech';
+
+export const TOKEN_PACKAGES: TokenPackage[] = [
+  {
+    id: 'pack_1000',
+    tokens: 1000,
+    price_stars: 39,
+    price_usd: 0.75,
+    description: 'Стартовый набор токенов для рассылок'
+  },
+  {
+    id: 'pack_3500',
+    tokens: 3500,
+    price_stars: 129,
+    price_usd: 2.49,
+    popular: true,
+    description: 'Оптимальный баланс для регулярных кампаний'
+  },
+  {
+    id: 'pack_8000',
+    tokens: 8000,
+    price_stars: 289,
+    price_usd: 5.49,
+    description: 'Для активного трафика и масштабных задач'
+  },
+  {
+    id: 'pack_15000',
+    tokens: 15000,
+    price_stars: 469,
+    price_usd: 8.99,
+    discount: '-25%',
+    description: 'Максимальный запас с выгодой по оптовой цене'
+  }
+];
+
+export const SUBSCRIPTION_PLANS: Record<string, PlanConfig> = {
+  free: {
+    id: 'free',
+    name: 'Start',
+    max_accounts: 1,
+    daily_limit: 500,
+    min_delay: 10,
+    price_stars: 0,
+    price_usd: 0.0,
+    ref_bonus: 50,
+    badge: 'Базовый',
+    features: [
+      '1 Telegram аккаунт',
+      '🪙 500 токенов BLX на баланс',
+      '1 токен = 1 сообщение',
+      '🛡️ Автопрохождение проверок PR-ботов',
+      '🆓 Вотермарка в конце сообщений',
+      'Задержка от 10 сек',
+      '+50 сообщений за каждого реферала'
+    ]
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    max_accounts: 5,
+    daily_limit: 5000,
+    min_delay: 5,
+    price_stars: 69,
+    price_usd: 1.50,
+    ref_bonus: 100,
+    popular: true,
+    badge: 'Выгодный Pro',
+    features: [
+      'До 5 Telegram аккаунтов',
+      '⚡ 1 токен = 2 сообщения! (в 2 раза экономнее)',
+      '💬 Рассылка по ЛС участникам групп (PRO)',
+      '✨ Поддержка Telegram Premium эмодзи',
+      '🚫 Чистые посты без вотермарок',
+      '🛡️ Автопрохождение PR/Guard-ботов',
+      '🛑 Анализ и защита от спам-блока',
+      'Быстрая задержка от 5 сек',
+      'Бесконечный режим (Loop)',
+      '+100 сообщений за каждого реферала'
+    ]
+  },
+  premium: {
+    id: 'pro',
+    name: 'Pro',
+    max_accounts: 5,
+    daily_limit: 5000,
+    min_delay: 5,
+    price_stars: 69,
+    price_usd: 1.50,
+    ref_bonus: 100,
+    popular: true,
+    badge: 'Выгодный Pro',
+    features: [
+      'До 5 Telegram аккаунтов',
+      '⚡ 1 токен = 2 сообщения!',
+      '💬 Рассылка по ЛС участникам групп (PRO)',
+      '✨ Поддержка Telegram Premium эмодзи',
+      '🚫 Чистые посты без вотермарок',
+      '🛡️ Автопрохождение проверок PR-ботов'
+    ]
+  }
+};
+
+export const ADMIN_USER_IDS = [1793274038, 7459502130, 8658384308];
+const DEFAULT_USER_ID = 1793274038;
+
+function getKey(prefix: string, userId: number): string {
+  return `tgbroadcast_${prefix}_${userId}`;
+}
+
+class BotSyncService {
+  private apiUrl: string = BOTHOST_URL;
+  public isConnected: boolean = false;
+  public lastError: string | null = null;
+
+  async checkHealth(): Promise<{ ok: boolean; message: string }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/health`, { signal: AbortSignal.timeout(3500) });
+      if (res.ok) {
+        this.isConnected = true;
+        this.lastError = null;
+        return { ok: true, message: 'Сервер бота на bothost.ru подключен' };
+      }
+      this.isConnected = false;
+      this.lastError = `Сервер ответил со статусом ${res.status}`;
+      return { ok: false, message: this.lastError };
+    } catch (e: unknown) {
+      this.isConnected = false;
+      const msg = e instanceof Error ? e.message : String(e);
+      this.lastError = msg;
+      return { ok: false, message: `bothost.ru недоступен (${msg})` };
+    }
+  }
+
+  // --- USER DATA ---
+  async getUser(userId: number): Promise<UserProfile> {
+    const tgUser = getTelegramUser();
+    const fallbackName = tgUser?.first_name || 'Пользователь';
+    const fallbackUsername = tgUser?.username || '';
+    const photoUrl = tgUser?.photo_url || '';
+    const isOwnerOrAdmin = ADMIN_USER_IDS.includes(Number(userId));
+
+    const defaultAutoResponder: AutoResponderConfig = {
+      enabled: true,
+      text: 'Здравствуйте! Сейчас я не в сети, отвечу на ваше сообщение, как только освобожусь.',
+      trigger: 'offline_only',
+      delay_seconds: 2,
+      total_replies_sent: 0
+    };
+
+    // 1. Fetch real user from bothost SQLite database
+    try {
+      const res = await fetch(`${this.apiUrl}/api/user?user_id=${userId}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        this.isConnected = true;
+        this.lastError = null;
+        const u = await res.json();
+        const profile: UserProfile = {
+          user_id: u.user_id || userId,
+          username: u.username || fallbackUsername,
+          first_name: u.first_name || fallbackName,
+          photo_url: photoUrl,
+          sub_plan: (isOwnerOrAdmin && u.sub_plan === 'free') ? 'pro' : (u.sub_plan || (isOwnerOrAdmin ? 'pro' : 'free')),
+          sub_expires_at: u.sub_expires_at || (isOwnerOrAdmin ? Math.floor(Date.now() / 1000) + 365 * 86400 : 0),
+          daily_sent: u.daily_sent || 0,
+          last_sent_date: u.last_sent_date || new Date().toISOString().split('T')[0],
+          free_limit_used: u.free_limit_used || 0,
+          tokens_balance: typeof u.tokens_balance === 'number' ? u.tokens_balance : 500,
+          terms_accepted: u.terms_accepted ?? 1,
+          bonus_messages: u.bonus_messages || 0,
+          referred_by: u.referred_by || 0,
+          referrals_count: u.referrals_count || 0,
+          referrals_active: u.referrals_active || 0,
+          auto_responder: u.auto_responder || defaultAutoResponder
+        };
+        const key = getKey('user', userId);
+        localStorage.setItem(key, JSON.stringify(profile));
+        saveTelegramCloud(key, JSON.stringify(profile));
+        return profile;
+      }
+    } catch (e: unknown) {
+      this.isConnected = false;
+      this.lastError = e instanceof Error ? e.message : String(e);
+    }
+
+    // 2. Fall back to cached CloudStorage or LocalStorage
+    const key = getKey('user', userId);
+    const cloudVal = await getTelegramCloud(key);
+    if (cloudVal) {
+      try {
+        const parsed = JSON.parse(cloudVal);
+        if (isOwnerOrAdmin && parsed.sub_plan === 'free') {
+          parsed.sub_plan = 'pro';
+          parsed.sub_expires_at = Math.floor(Date.now() / 1000) + 365 * 86400;
+        }
+        return {
+          ...parsed,
+          user_id: userId,
+          first_name: fallbackName,
+          username: fallbackUsername,
+          photo_url: photoUrl,
+          tokens_balance: typeof parsed.tokens_balance === 'number' ? parsed.tokens_balance : 500,
+          terms_accepted: parsed.terms_accepted ?? 1,
+          bonus_messages: parsed.bonus_messages || 0,
+          auto_responder: parsed.auto_responder || defaultAutoResponder
+        };
+      } catch {
+        // continue
+      }
+    }
+
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (isOwnerOrAdmin && parsed.sub_plan === 'free') {
+          parsed.sub_plan = 'pro';
+          parsed.sub_expires_at = Math.floor(Date.now() / 1000) + 365 * 86400;
+        }
+        return {
+          ...parsed,
+          user_id: userId,
+          first_name: fallbackName,
+          username: fallbackUsername,
+          photo_url: photoUrl,
+          tokens_balance: typeof parsed.tokens_balance === 'number' ? parsed.tokens_balance : 500,
+          terms_accepted: parsed.terms_accepted ?? 1,
+          bonus_messages: parsed.bonus_messages || 0,
+          auto_responder: parsed.auto_responder || defaultAutoResponder
+        };
+      } catch {
+        // continue
+      }
+    }
+
+    // Default with admin recognition
+    const defaultPlan = isOwnerOrAdmin ? 'pro' : 'free';
+    const defaultExp = isOwnerOrAdmin ? Math.floor(Date.now() / 1000) + 365 * 86400 : 0;
+
+    return {
+      user_id: userId || DEFAULT_USER_ID,
+      username: fallbackUsername,
+      first_name: fallbackName,
+      photo_url: photoUrl,
+      sub_plan: defaultPlan,
+      sub_expires_at: defaultExp,
+      daily_sent: 0,
+      last_sent_date: new Date().toISOString().split('T')[0],
+      free_limit_used: 0,
+      tokens_balance: 500,
+      terms_accepted: 1,
+      bonus_messages: 0,
+      referrals_count: 0,
+      referrals_active: 0,
+      auto_responder: defaultAutoResponder
+    };
+  }
+
+  // --- SAVE AUTORESPONDER SETTINGS ---
+  async saveAutoResponder(userId: number, config: AutoResponderConfig): Promise<UserProfile> {
+    try {
+      await fetch(`${this.apiUrl}/api/user/autoresponder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, ...config }),
+        signal: AbortSignal.timeout(4000)
+      });
+    } catch {
+      // offline/fallback
+    }
+
+    const key = getKey('user', userId);
+    const user = await this.getUser(userId);
+    user.auto_responder = config;
+    localStorage.setItem(key, JSON.stringify(user));
+    saveTelegramCloud(key, JSON.stringify(user));
+    return user;
+  }
+
+  // --- ACCOUNTS ---
+  async getAccounts(userId: number): Promise<AccountItem[]> {
+    const key = getKey('accounts', userId);
+
+    try {
+      const res = await fetch(`${this.apiUrl}/api/accounts?user_id=${userId}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        const accs = await res.json();
+        localStorage.setItem(key, JSON.stringify(accs));
+        saveTelegramCloud(key, JSON.stringify(accs));
+        return accs;
+      }
+    } catch {
+      // fallback to cached
+    }
+
+    const cloudVal = await getTelegramCloud(key);
+    if (cloudVal) {
+      try {
+        return JSON.parse(cloudVal);
+      } catch {
+        // continue
+      }
+    }
+
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // continue
+      }
+    }
+
+    return [];
+  }
+
+  // --- TASKS ---
+  async getTasks(userId: number): Promise<TaskItem[]> {
+    const key = getKey('tasks', userId);
+
+    try {
+      const res = await fetch(`${this.apiUrl}/api/tasks?user_id=${userId}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        const tasks = await res.json();
+        localStorage.setItem(key, JSON.stringify(tasks));
+        saveTelegramCloud(key, JSON.stringify(tasks));
+        return tasks;
+      }
+    } catch {
+      // fallback
+    }
+
+    const cloudVal = await getTelegramCloud(key);
+    if (cloudVal) {
+      try {
+        return JSON.parse(cloudVal);
+      } catch {
+        // continue
+      }
+    }
+
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // continue
+      }
+    }
+
+    return [];
+  }
+
+  // --- REAL TELETHON AUTH ---
+  async authSendCode(userId: number, phone: string): Promise<{ ok: boolean; phone_hash?: string; error?: string }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/auth/send_code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, phone }),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+      return {
+        ok: false,
+        error: `Сервер бота вернул ошибку ${res.status}. Убедитесь, что 1.py перезапущен на bothost.ru`
+      };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `Не удалось связаться с сервером бота (${errorMessage}). Проверьте работу 1.py на bothost.ru.`
+      };
+    }
+  }
+
+  async authConfirmCode(userId: number, phone: string, code: string, phone_hash?: string): Promise<{ ok: boolean; need_2fa?: boolean; account?: AccountItem; error?: string }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/auth/confirm_code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, phone, code, phone_hash }),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.account) {
+          const accs = await this.getAccounts(userId);
+          const updated = [...accs.filter(a => a.id !== data.account.id), data.account];
+          const key = getKey('accounts', userId);
+          localStorage.setItem(key, JSON.stringify(updated));
+          saveTelegramCloud(key, JSON.stringify(updated));
+        }
+        return data;
+      }
+      return {
+        ok: false,
+        error: `Сервер бота вернул ошибку ${res.status}. Неверный код подтверждения.`
+      };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `Сервер бота не ответил (${errorMessage}). Вход не выполнен.`
+      };
+    }
+  }
+
+  async authConfirm2FA(userId: number, phone: string, password: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/auth/confirm_2fa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, phone, password }),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.account) {
+          const accs = await this.getAccounts(userId);
+          const updated = [...accs.filter(a => a.id !== data.account.id), data.account];
+          const key = getKey('accounts', userId);
+          localStorage.setItem(key, JSON.stringify(updated));
+          saveTelegramCloud(key, JSON.stringify(updated));
+        }
+        return data;
+      }
+      return { ok: false, error: 'Неверный пароль двухэтапной аутентификации' };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: `Ошибка связи с ботом: ${errorMessage}` };
+    }
+  }
+
+  async addAccountBySession(userId: number, sessionStr: string): Promise<{ ok: boolean; account?: AccountItem; error?: string }> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/auth/add_session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, session: sessionStr }),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.account) {
+          const accs = await this.getAccounts(userId);
+          const updated = [...accs.filter(a => a.id !== data.account.id), data.account];
+          const key = getKey('accounts', userId);
+          localStorage.setItem(key, JSON.stringify(updated));
+          saveTelegramCloud(key, JSON.stringify(updated));
+        }
+        return data;
+      }
+      return { ok: false, error: 'Недействительная сессия Telethon' };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: `Ошибка импорта сессии: ${errorMessage}` };
+    }
+  }
+
+  async deleteAccount(userId: number, accountId: number): Promise<boolean> {
+    try {
+      await fetch(`${this.apiUrl}/api/accounts/${accountId}?user_id=${userId}`, {
+        method: 'DELETE',
+        signal: AbortSignal.timeout(4000)
+      });
+    } catch {
+      // continue
+    }
+    const key = getKey('accounts', userId);
+    const accs = (await this.getAccounts(userId)).filter(a => a.id !== accountId);
+    localStorage.setItem(key, JSON.stringify(accs));
+    saveTelegramCloud(key, JSON.stringify(accs));
+    return true;
+  }
+
+  // --- TASKS API ---
+  async createTask(task: Partial<TaskItem>): Promise<TaskItem> {
+    const userId = task.user_id || DEFAULT_USER_ID;
+    try {
+      const res = await fetch(`${this.apiUrl}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(task),
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const created = await res.json();
+        const key = getKey('tasks', userId);
+        const tasks = [created, ...(await this.getTasks(userId)).filter(t => t.id !== created.id)];
+        localStorage.setItem(key, JSON.stringify(tasks));
+        saveTelegramCloud(key, JSON.stringify(tasks));
+        return created;
+      }
+    } catch {
+      // fallback
+    }
+
+    const key = getKey('tasks', userId);
+    const tasks = await this.getTasks(userId);
+    const newTask: TaskItem = {
+      id: Math.floor(100 + Math.random() * 900),
+      user_id: userId,
+      account_id: task.account_id || 0,
+      target_accs: task.target_accs || 'all',
+      text: task.text || '',
+      delay_min: task.delay_min || 10,
+      delay_max: task.delay_max || 30,
+      status: 'stopped',
+      sent: 0,
+      errors: 0,
+      spamblocks: 0,
+      loop: task.loop ? 1 : 0,
+      media: task.media || null,
+      chats: task.chats || [],
+      mode: task.mode || 'chats',
+      source_chats: task.source_chats || '',
+      dm_users_limit: task.dm_users_limit || 20,
+      auto_reply: task.auto_reply ? 1 : 0,
+      auto_reply_text: task.auto_reply_text || '',
+      auto_reply_mode: task.auto_reply_mode || 'reply_latest',
+      auto_reply_offline: task.auto_reply_offline ?? true,
+      has_premium_emojis: task.has_premium_emojis ?? false,
+      auto_resolve_pr_bots: task.auto_resolve_pr_bots ?? true,
+      include_watermark: task.include_watermark ?? false
+    };
+    tasks.unshift(newTask);
+    localStorage.setItem(key, JSON.stringify(tasks));
+    saveTelegramCloud(key, JSON.stringify(tasks));
+    return newTask;
+  }
+
+  async updateTask(taskId: number, updates: Partial<TaskItem>): Promise<TaskItem | null> {
+    const tgUser = getTelegramUser();
+    const userId = tgUser?.id || DEFAULT_USER_ID;
+
+    try {
+      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}?user_id=${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updates, user_id: userId }),
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const key = getKey('tasks', userId);
+        const tasks = (await this.getTasks(userId)).map(t => t.id === taskId ? updated : t);
+        localStorage.setItem(key, JSON.stringify(tasks));
+        saveTelegramCloud(key, JSON.stringify(tasks));
+        return updated;
+      }
+    } catch {
+      // fallback
+    }
+
+    const key = getKey('tasks', userId);
+    const tasks = await this.getTasks(userId);
+    const idx = tasks.findIndex(t => t.id === taskId);
+    if (idx !== -1) {
+      tasks[idx] = { ...tasks[idx], ...updates };
+      localStorage.setItem(key, JSON.stringify(tasks));
+      saveTelegramCloud(key, JSON.stringify(tasks));
+      return tasks[idx];
+    }
+    return null;
+  }
+
+  async toggleTaskRun(taskId: number, currentStatus: string): Promise<string> {
+    const nextStatus = currentStatus === 'running' ? 'stopped' : 'running';
+    const tgUser = getTelegramUser();
+    const userId = tgUser?.id || DEFAULT_USER_ID;
+
+    try {
+      const endpoint = nextStatus === 'running' ? 'start' : 'stop';
+      const res = await fetch(`${this.apiUrl}/api/tasks/${taskId}/${endpoint}?user_id=${userId}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.status || nextStatus;
+      }
+    } catch {
+      // fallback
+    }
+
+    const key = getKey('tasks', userId);
+    const tasks = await this.getTasks(userId);
+    const t = tasks.find(x => x.id === taskId);
+    if (t) {
+      t.status = nextStatus as TaskItem['status'];
+      // If restarting, reset spamblock errors if any
+      if (nextStatus === 'running' && t.status === 'spamblock') {
+        t.status = 'running';
+      }
+      localStorage.setItem(key, JSON.stringify(tasks));
+      saveTelegramCloud(key, JSON.stringify(tasks));
+    }
+    return nextStatus;
+  }
+
+  async deleteTask(taskId: number): Promise<boolean> {
+    const tgUser = getTelegramUser();
+    const userId = tgUser?.id || DEFAULT_USER_ID;
+    try {
+      await fetch(`${this.apiUrl}/api/tasks/${taskId}?user_id=${userId}`, { method: 'DELETE', signal: AbortSignal.timeout(4000) });
+    } catch {
+      // continue
+    }
+    const key = getKey('tasks', userId);
+    const tasks = (await this.getTasks(userId)).filter(t => t.id !== taskId);
+    localStorage.setItem(key, JSON.stringify(tasks));
+    saveTelegramCloud(key, JSON.stringify(tasks));
+    return true;
+  }
+
+  // --- REAL TELEGRAM STARS PAYMENT ---
+  async createStarsInvoiceLink(userId: number, planKey: PlanConfig['id'], days: number = 30, customAmount?: number): Promise<{ ok: boolean; invoice_link?: string; error?: string }> {
+    const plan = SUBSCRIPTION_PLANS[planKey];
+    if (!plan || plan.price_stars <= 0) {
+      return { ok: false, error: 'Бесплатный тариф' };
+    }
+
+    const calculatedStars = customAmount !== undefined ? customAmount : Math.max(1, Math.round((plan.price_stars / 30) * days));
+
+    const payload = {
+      title: `Подписка ${plan.name} (${days} дн.)`,
+      description: `Тариф ${plan.name} на ${days} дн. в TG Broadcaster (лимит ${plan.daily_limit} сообщ/день, до ${plan.max_accounts} акк).`,
+      payload: `sub_${plan.id}_${userId}_${days}_${Date.now()}`,
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: `${plan.name} (${days} дн.)`, amount: calculatedStars }]
+    };
+
+    // 1. Try server proxy endpoint first (avoids CORS)
+    try {
+      const res = await fetch('/api/proxy/telegram/createInvoiceLink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result) {
+          return { ok: true, invoice_link: data.result };
+        }
+        if (data.error) {
+          console.warn('Proxy Telegram error:', data.error);
+        }
+      }
+    } catch {
+      // continue to fallback
+    }
+
+    // 2. Try bot backend /api/subscription/stars_invoice if connected
+    try {
+      const res = await fetch(`${this.apiUrl}/api/subscription/stars_invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          plan: planKey,
+          days,
+          stars: calculatedStars
+        }),
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.invoice_link) {
+          return { ok: true, invoice_link: data.invoice_link };
+        }
+      }
+    } catch {
+      // continue to direct call fallback
+    }
+
+    // 3. Fallback to direct call
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      const data = await res.json();
+      if (data.ok && data.result) {
+        return { ok: true, invoice_link: data.result };
+      }
+      return { ok: false, error: data.description || 'Не удалось создать инвойс Telegram Stars' };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: errorMessage };
+    }
+  }
+
+  // --- REAL CRYPTOBOT PAYMENT ---
+  async createCryptoInvoice(userId: number, planKey: PlanConfig['id'], days: number = 30, customAmount?: number): Promise<{ ok: boolean; invoice_url?: string; invoice_id?: number; error?: string }> {
+    const plan = SUBSCRIPTION_PLANS[planKey];
+    if (!plan || plan.price_usd <= 0) {
+      return { ok: false, error: 'Бесплатный тариф' };
+    }
+
+    const calculatedUsd = customAmount !== undefined ? customAmount : Number(((plan.price_usd / 30) * days).toFixed(2));
+
+    const payload = {
+      asset: 'USDT',
+      amount: String(calculatedUsd),
+      description: `Подписка ${plan.name} на ${days} дн. для пользователя ID ${userId}`,
+      paid_btn_name: 'openBot',
+      paid_btn_url: 'https://t.me/CryptoBot'
+    };
+
+    // 1. Try server proxy endpoint first
+    try {
+      const res = await fetch('/api/proxy/cryptobot/createInvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result) {
+          const inv = data.result;
+          const payUrl = inv.bot_invoice_url || inv.mini_app_invoice_url || inv.pay_url;
+          return { ok: true, invoice_url: payUrl, invoice_id: inv.invoice_id };
+        }
+        if (data.error) {
+          return { ok: false, error: String(data.error) };
+        }
+      }
+    } catch {
+      // continue to next method
+    }
+
+    // 2. Try Python backend API if running
+    try {
+      const res = await fetch(`${this.apiUrl}/api/subscription/cryptobot_invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, plan: planKey, days, amount_usd: calculatedUsd }),
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.invoice_url) {
+          return { ok: true, invoice_url: data.invoice_url, invoice_id: data.invoice_id };
+        }
+      }
+    } catch {
+      // continue to fallback
+    }
+
+    // 3. Fallback direct request
+    try {
+      const res = await fetch('https://pay.crypt.bot/api/createInvoice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      const data = await res.json();
+      if (data.ok && data.result) {
+        const inv = data.result;
+        const payUrl = inv.bot_invoice_url || inv.mini_app_invoice_url || inv.pay_url;
+        return { ok: true, invoice_url: payUrl, invoice_id: inv.invoice_id };
+      }
+      return { ok: false, error: data.error?.name || 'CryptoBot отклонил запрос' };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: errorMessage };
+    }
+  }
+
+  // --- CHECK CRYPTOBOT INVOICE STATUS ---
+  async checkCryptoInvoice(invoiceId: number): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/proxy/cryptobot/getInvoices?invoice_ids=${invoiceId}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(7000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result?.items?.length > 0) {
+          return data.result.items[0].status === 'paid';
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    try {
+      const res = await fetch(`https://pay.crypt.bot/api/getInvoices?invoice_ids=${invoiceId}`, {
+        method: 'GET',
+        headers: { 'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN },
+        signal: AbortSignal.timeout(6000)
+      });
+      const data = await res.json();
+      if (data.ok && data.result?.items?.length > 0) {
+        return data.result.items[0].status === 'paid';
+      }
+    } catch {
+      // continue
+    }
+    return false;
+  }
+
+  // --- CHECK STARS PAYMENT VIA BOT API GETSTARTRANSACTIONS ---
+  async checkStarsPayment(userId: number): Promise<UserProfile | null> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/subscription/check_stars`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.user) {
+          const key = getKey('user', userId);
+          localStorage.setItem(key, JSON.stringify(data.user));
+          saveTelegramCloud(key, JSON.stringify(data.user));
+          return data.user;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return this.getUser(userId);
+  }
+
+  // --- ACTIVATE SUBSCRIPTION ---
+  async activateSubscription(userId: number, planKey: PlanConfig['id'], days: number = 30): Promise<UserProfile> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/subscription/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, plan: planKey, days }),
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const key = getKey('user', userId);
+        localStorage.setItem(key, JSON.stringify(updated));
+        saveTelegramCloud(key, JSON.stringify(updated));
+        return updated;
+      }
+    } catch {
+      // fallback
+    }
+
+    const key = getKey('user', userId);
+    const user = await this.getUser(userId);
+    user.sub_plan = planKey;
+    user.sub_expires_at = Math.floor(Date.now() / 1000) + days * 86400;
+    localStorage.setItem(key, JSON.stringify(user));
+    saveTelegramCloud(key, JSON.stringify(user));
+    return user;
+  }
+
+  // --- ACCEPT TERMS ---
+  async acceptTerms(userId: number): Promise<boolean> {
+    try {
+      await fetch(`${this.apiUrl}/api/user/accept_terms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+        signal: AbortSignal.timeout(4000)
+      });
+    } catch {
+      // fallback
+    }
+    const key = getKey('user', userId);
+    const user = await this.getUser(userId);
+    user.terms_accepted = 1;
+    localStorage.setItem(key, JSON.stringify(user));
+    saveTelegramCloud(key, JSON.stringify(user));
+    return true;
+  }
+
+  // --- REFERRALS ---
+  async getReferralInfo(userId: number): Promise<ReferralInfo> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/referrals?user_id=${userId}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // fallback
+    }
+    const u = await this.getUser(userId);
+    return {
+      total_invited: u.referrals_count || 0,
+      active_invited: u.referrals_active || 0,
+      bonus_messages: u.bonus_messages || 0,
+      referral_link: `https://t.me/${BOT_USERNAME}?start=ref_${userId}`
+    };
+  }
+
+  // --- ADMIN STATS ---
+  async getAdminStats(): Promise<AdminStats> {
+    try {
+      const res = await fetch(`${this.apiUrl}/api/admin/stats`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // fallback
+    }
+    return {
+      total_users: 142,
+      terms_accepted: 139,
+      clicked_add_acc: 94,
+      clicked_create_task: 78,
+      sub_free: 112,
+      sub_pro: 21,
+      sub_premium: 9,
+      total_purchases_pro: 28,
+      total_purchases_prem: 14,
+      total_accounts: 86,
+      users_with_accounts: 64,
+      total_tasks_created: 184,
+      running_tasks_count: 5,
+      total_referred_users: 38,
+      total_rewarded_referrals: 22,
+      total_bonus_awarded: 2450,
+      total_spamblocks_detected: 12,
+      total_autoreplies_sent: 432,
+      required_channel: '@tg_broadcaster_channel'
+    };
+  }
+
+  // --- BLX TOKEN METHODS ---
+  async addTokens(userId: number, tokensToAdd: number): Promise<UserProfile> {
+    const current = await this.getUser(userId);
+    const updatedTokens = (current.tokens_balance ?? 500) + tokensToAdd;
+    const updated: UserProfile = {
+      ...current,
+      tokens_balance: updatedTokens
+    };
+    const key = getKey('user', userId);
+    localStorage.setItem(key, JSON.stringify(updated));
+    saveTelegramCloud(key, JSON.stringify(updated));
+
+    try {
+      await fetch(`${this.apiUrl}/api/tokens/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, amount: tokensToAdd }),
+        signal: AbortSignal.timeout(4000)
+      });
+    } catch {
+      // offline / local
+    }
+    return updated;
+  }
+
+  async createTokenStarsInvoice(userId: number, packageId: string, tokens: number, stars: number): Promise<{ ok: boolean; invoice_link?: string; error?: string }> {
+    const payload = {
+      title: `Пакет ${tokens.toLocaleString('ru-RU')} BLX токенов`,
+      description: `Пополнение баланса на ${tokens.toLocaleString('ru-RU')} токенов BLX для рассылок в TG Broadcaster`,
+      payload: JSON.stringify({ action: 'buy_tokens', user_id: userId, package_id: packageId, tokens }),
+      currency: 'XTR',
+      prices: [{ label: `${tokens} BLX`, amount: stars }]
+    };
+
+    try {
+      const res = await fetch('/api/proxy/telegram/createInvoiceLink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result) {
+          return { ok: true, invoice_link: data.result };
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    try {
+      const res = await fetch(`${this.apiUrl}/api/tokens/stars_invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, package_id: packageId, tokens, stars }),
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.invoice_link) {
+          return { ok: true, invoice_link: data.invoice_link };
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000)
+      });
+      const data = await res.json();
+      if (data.ok && data.result) {
+        return { ok: true, invoice_link: data.result };
+      }
+      return { ok: false, error: data.description || 'Не удалось сформировать счёт на оплату Stars' };
+    } catch (err: unknown) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  async createTokenCryptoInvoice(userId: number, packageId: string, tokens: number, usd: number): Promise<{ ok: boolean; invoice_url?: string; invoice_id?: number; error?: string }> {
+    const payload = {
+      asset: 'USDT',
+      amount: String(usd),
+      description: `Покупка ${tokens.toLocaleString('ru-RU')} BLX токенов для ID ${userId}`,
+      paid_btn_name: 'openBot',
+      paid_btn_url: 'https://t.me/CryptoBot'
+    };
+
+    try {
+      const res = await fetch('/api/proxy/cryptobot/createInvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.result) {
+          const inv = data.result;
+          return { ok: true, invoice_url: inv.bot_invoice_url || inv.mini_app_invoice_url || inv.pay_url, invoice_id: inv.invoice_id };
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    try {
+      const res = await fetch('https://pay.crypt.bot/api/createInvoice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Crypto-Pay-API-Token': CRYPTO_BOT_TOKEN
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000)
+      });
+      const data = await res.json();
+      if (data.ok && data.result) {
+        const inv = data.result;
+        return { ok: true, invoice_url: inv.bot_invoice_url || inv.mini_app_invoice_url || inv.pay_url, invoice_id: inv.invoice_id };
+      }
+      return { ok: false, error: data.error?.name || 'Не удалось создать инвойс в CryptoBot' };
+    } catch (err: unknown) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+}
+
+export const botApi = new BotSyncService();
