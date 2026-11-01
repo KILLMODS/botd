@@ -111,7 +111,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
       {/* Accounts List */}
       <div className="space-y-2.5">
         {filteredAccounts.length === 0 ? (
-          <div className="apple-group-card p-8 text-center space-y-3">
+          <div className="liquid-glass-card p-8 text-center space-y-3">
             <div className="w-14 h-14 rounded-3xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mx-auto text-neutral-400">
               <Smartphone className="w-7 h-7" />
             </div>
@@ -130,7 +130,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             return (
               <div
                 key={acc.id}
-                className="apple-group-card p-3.5 flex items-center justify-between transition-all hover:bg-white/[0.06]"
+                className="liquid-glass-card p-3.5 flex items-center justify-between transition-all hover:bg-white/[0.06]"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center flex-shrink-0 text-blue-400">

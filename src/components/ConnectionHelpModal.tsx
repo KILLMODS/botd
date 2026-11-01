@@ -23,8 +23,11 @@ export const ConnectionHelpModal: React.FC<ConnectionHelpModalProps> = ({ onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-sm p-5 space-y-4 text-white shadow-xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="liquid-glass-card border border-white/[0.18] rounded-[28px] w-full max-w-sm p-5 space-y-4 text-white shadow-2xl relative animate-spring-in"
+      >
         <div className="flex items-center justify-between pb-3 border-b border-neutral-900">
           <div>
             <h3 className="text-sm font-semibold text-white">Синхронизация с bothost.ru</h3>

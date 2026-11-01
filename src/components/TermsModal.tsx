@@ -15,7 +15,13 @@ export const TermsModal: React.FC<TermsModalProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-md bg-neutral-950 border border-neutral-800 rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] flex flex-col">
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md liquid-glass-card border-t border-x sm:border border-white/[0.18] rounded-t-[32px] sm:rounded-[32px] p-5 space-y-4 max-h-[90vh] flex flex-col animate-sheet-spring text-white shadow-2xl"
+      >
+        {/* Grab Handle for bottom sheet */}
+        <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto -mt-1 sm:hidden" />
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">

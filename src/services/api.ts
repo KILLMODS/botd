@@ -791,8 +791,11 @@ class BotSyncService {
       }
       return { ok: false, error: data.error?.name || 'CryptoBot отклонил запрос' };
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      return { ok: false, error: errorMessage };
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('fetch') || msg.includes('Network') || msg.includes('Failed')) {
+        return { ok: false, error: 'Связь с CryptoBot прервана. Рекомендуем оплатить через Telegram Stars (мгновенно) или повторить попытку.' };
+      }
+      return { ok: false, error: msg };
     }
   }
 
@@ -1089,7 +1092,11 @@ class BotSyncService {
       }
       return { ok: false, error: data.error?.name || 'Не удалось создать инвойс в CryptoBot' };
     } catch (err: unknown) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('fetch') || msg.includes('Network') || msg.includes('Failed')) {
+        return { ok: false, error: 'Связь с CryptoBot прервана. Рекомендуем оплатить через Telegram Stars (мгновенно) или повторить попытку.' };
+      }
+      return { ok: false, error: msg };
     }
   }
 }

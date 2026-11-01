@@ -44,15 +44,21 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({ user, onClose }) =
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-md bg-neutral-950 border border-neutral-800 rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md liquid-glass-card border-t border-x sm:border border-white/[0.18] rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-sheet-spring text-white shadow-2xl"
+      >
+        {/* Grab Handle for bottom sheet */}
+        <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto -mt-1 sm:hidden" />
+
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/15 border border-blue-400/25 flex items-center justify-center text-blue-400 shadow-sm">
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Реферальная программа</h3>
+              <h3 className="text-base font-bold text-white tracking-tight">Реферальная программа</h3>
               <p className="text-[11px] text-neutral-400">Приглашайте друзей и получайте сообщения</p>
             </div>
           </div>
@@ -61,29 +67,29 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({ user, onClose }) =
               triggerHaptic('light');
               onClose();
             }}
-            className="w-8 h-8 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-all active:scale-90"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Stats Grid */}
+        {/* Simplified 3-Stat Counters */}
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-2xl p-3 text-center">
-            <div className="text-[10px] text-neutral-400">Перешли</div>
-            <div className="text-lg font-bold text-white font-mono mt-0.5">
+          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-center">
+            <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium">Перешли</div>
+            <div className="text-xl font-bold text-white font-mono mt-0.5">
               {isLoading ? '...' : refInfo.total_invited}
             </div>
           </div>
-          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-2xl p-3 text-center">
-            <div className="text-[10px] text-neutral-400">Подключили</div>
-            <div className="text-lg font-bold text-emerald-400 font-mono mt-0.5">
+          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-center">
+            <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium">Подключили</div>
+            <div className="text-xl font-bold text-emerald-400 font-mono mt-0.5">
               {isLoading ? '...' : refInfo.active_invited}
             </div>
           </div>
-          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-2xl p-3 text-center">
-            <div className="text-[10px] text-neutral-400">Бонус</div>
-            <div className="text-lg font-bold text-blue-400 font-mono mt-0.5">
+          <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-center">
+            <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium">Бонусы</div>
+            <div className="text-xl font-bold text-blue-400 font-mono mt-0.5">
               +{isLoading ? '...' : refInfo.bonus_messages}
             </div>
           </div>
@@ -91,14 +97,14 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({ user, onClose }) =
 
         {/* Referral Link Box */}
         <div className="space-y-1.5">
-          <div className="text-xs font-medium text-neutral-300">Ваша пригласительная ссылка:</div>
-          <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-xl p-2.5">
-            <div className="text-xs text-neutral-300 font-mono truncate flex-1 select-all">
+          <div className="text-xs font-semibold text-neutral-300">Ваша персональная ссылка:</div>
+          <div className="flex items-center gap-2 bg-[#12131c] border border-white/15 rounded-2xl p-2.5">
+            <div className="text-xs text-neutral-300 font-mono truncate flex-1 select-all px-1">
               {refInfo.referral_link}
             </div>
             <button
               onClick={handleCopy}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 shadow-sm ${
                 copied
                   ? 'bg-emerald-600 text-white'
                   : 'bg-white text-black hover:bg-neutral-200'
@@ -113,44 +119,49 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({ user, onClose }) =
         {/* Action Button: Share */}
         <button
           onClick={handleShare}
-          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-600/20"
+          className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98]"
         >
           <Share2 className="w-4 h-4" />
-          <span>Поделиться в Telegram</span>
+          <span>Поделиться ссылкой в Telegram</span>
         </button>
 
-        {/* Tiers Reward Explanation */}
-        <div className="bg-neutral-900/40 border border-neutral-800/60 rounded-2xl p-3.5 space-y-2.5">
+        {/* Corrected Clean Tiers Reward Box (Start & Pro ONLY) */}
+        <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] space-y-2.5">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-            <Gift className="w-4 h-4 text-amber-400" />
-            <span>Награды за подключение аккаунта:</span>
+            <Gift className="w-4 h-4 text-amber-300" />
+            <span>Награды за подключение первого аккаунта другом:</span>
           </div>
 
           <div className="space-y-1.5 text-xs">
-            <div className={`flex items-center justify-between p-2 rounded-xl border ${
-              user.sub_plan === 'free' ? 'bg-neutral-800/80 border-neutral-700' : 'bg-neutral-900/40 border-neutral-800/50'
+            <div className={`flex items-center justify-between p-2.5 rounded-xl border ${
+              user.sub_plan === 'free' ? 'bg-white/[0.08] border-white/20' : 'bg-white/[0.02] border-white/[0.06]'
             }`}>
-              <span className="text-neutral-300">Тариф Free (Старт)</span>
-              <span className="font-semibold text-white font-mono">+50 сообщений</span>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-white">Тариф Start</span>
+                {user.sub_plan === 'free' && (
+                  <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-full bg-white/10 text-neutral-300 font-bold">Ваш тариф</span>
+                )}
+              </div>
+              <span className="font-bold text-white font-mono">+50 сообщений</span>
             </div>
-            <div className={`flex items-center justify-between p-2 rounded-xl border ${
-              user.sub_plan === 'pro' ? 'bg-neutral-800/80 border-blue-500/40' : 'bg-neutral-900/40 border-neutral-800/50'
+
+            <div className={`flex items-center justify-between p-2.5 rounded-xl border ${
+              user.sub_plan === 'pro' || user.sub_plan === 'premium' ? 'bg-blue-500/15 border-blue-400/30' : 'bg-white/[0.02] border-white/[0.06]'
             }`}>
-              <span className="text-neutral-300">Тариф Pro</span>
-              <span className="font-semibold text-blue-400 font-mono">+100 сообщений</span>
-            </div>
-            <div className={`flex items-center justify-between p-2 rounded-xl border ${
-              user.sub_plan === 'premium' ? 'bg-neutral-800/80 border-purple-500/40' : 'bg-neutral-900/40 border-neutral-800/50'
-            }`}>
-              <span className="text-neutral-300">Тариф Premium+</span>
-              <span className="font-semibold text-purple-400 font-mono">+230 сообщений</span>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-blue-300">Тариф Pro</span>
+                {(user.sub_plan === 'pro' || user.sub_plan === 'premium') && (
+                  <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold">Ваш тариф</span>
+                )}
+              </div>
+              <span className="font-bold text-blue-400 font-mono">+100 сообщений</span>
             </div>
           </div>
 
-          <div className="flex items-start gap-2 pt-1 text-[11px] text-neutral-400">
+          <div className="flex items-start gap-2 pt-1 text-[11px] text-neutral-400 leading-snug">
             <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
             <span>
-              Бонус начисляется только один раз, когда реферал успешно добавит и авторизует рабочий аккаунт. Защита от накрутки и самоприглашений активна.
+              Бонус начисляется сразу, как только приглашённый пользователь привяжет свой рабочий аккаунт.
             </span>
           </div>
         </div>

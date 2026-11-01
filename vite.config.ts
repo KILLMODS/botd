@@ -10,6 +10,16 @@ function paymentProxyPlugin(): Plugin {
   const setupMiddlewares = (server: any) => {
     // 1. Create CryptoBot Invoice Server-Side (No CORS)
     server.middlewares.use('/api/proxy/cryptobot/createInvoice', async (req: any, res: any) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Crypto-Pay-API-Token, Authorization');
+
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 200;
+        res.end();
+        return;
+      }
+
       if (req.method === 'POST') {
         let body = '';
         req.on('data', (chunk: any) => (body += chunk));
@@ -40,6 +50,16 @@ function paymentProxyPlugin(): Plugin {
 
     // 2. Check CryptoBot Invoices Server-Side
     server.middlewares.use('/api/proxy/cryptobot/getInvoices', async (req: any, res: any) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Crypto-Pay-API-Token, Authorization');
+
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 200;
+        res.end();
+        return;
+      }
+
       try {
         const url = new URL(req.url, 'http://localhost:3000');
         const invoiceIds = url.searchParams.get('invoice_ids') || '';
@@ -60,6 +80,16 @@ function paymentProxyPlugin(): Plugin {
 
     // 3. Create Telegram Stars Invoice Link Server-Side
     server.middlewares.use('/api/proxy/telegram/createInvoiceLink', async (req: any, res: any) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 200;
+        res.end();
+        return;
+      }
+
       if (req.method === 'POST') {
         let body = '';
         req.on('data', (chunk: any) => (body += chunk));

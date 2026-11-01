@@ -109,11 +109,14 @@ export const TokenShopModal: React.FC<TokenShopModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xl transition-opacity">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in">
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md bg-[#16171e]/90 backdrop-blur-2xl border border-white/[0.12] rounded-[28px] p-5 sm:p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto relative text-white animate-spring-in"
+        className="w-full max-w-lg bg-[#14151e]/98 border-t sm:border border-x border-white/[0.18] rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-6 shadow-[0_-20px_50px_rgba(0,0,0,0.85),inset_0_1px_0_0_rgba(255,255,255,0.25)] flex flex-col max-h-[90vh] overflow-y-auto relative text-white animate-sheet-spring"
       >
+        {/* Grab Handle for bottom sheet */}
+        <div className="w-12 h-1.5 rounded-full bg-white/25 mx-auto mb-3 sm:hidden" />
+
         {/* Header */}
         <div className="flex items-center justify-between pb-3.5 border-b border-white/[0.08]">
           <div className="flex items-center gap-3">

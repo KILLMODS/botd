@@ -111,8 +111,8 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
 
   return (
     <div className="space-y-4 pb-28 animate-fade-in select-none">
-      {/* Header Banner */}
-      <div className="apple-group-card p-4.5 flex items-center justify-between border border-white/[0.08] backdrop-blur-xl bg-[#18181b]/70">
+      {/* Header Banner (Liquid Glass) */}
+      <div className="liquid-glass-card p-4.5 flex items-center justify-between">
         <div>
           <span className="text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
             Экономика рассылок TG Broadcaster
@@ -138,8 +138,8 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
         </button>
       </div>
 
-      {/* Start Plan Card */}
-      <div className="apple-group-card p-5 space-y-4">
+      {/* Start Plan Card (Liquid Glass) */}
+      <div className="liquid-glass-card p-5 space-y-4">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -202,8 +202,8 @@ export const SubscriptionsView: React.FC<SubscriptionsViewProps> = ({
         </div>
       </div>
 
-      {/* Pro Plan Card */}
-      <div className="apple-group-card p-5 space-y-4 border border-white/[0.14] relative overflow-hidden">
+      {/* Pro Plan Card (Liquid Glass) */}
+      <div className="liquid-glass-card p-5 space-y-4 border border-white/[0.18] relative overflow-hidden">
         <div className="flex items-start justify-between relative z-10">
           <div>
             <div className="flex items-center gap-2">

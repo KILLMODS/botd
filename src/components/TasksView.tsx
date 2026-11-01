@@ -126,7 +126,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
       </div>
 
       {/* Task Fleet Statistics Bar (with dedicated Spam-block tracking) */}
-      <div className="apple-group-card p-3 grid grid-cols-4 gap-2 text-center">
+      <div className="liquid-glass-card p-3 grid grid-cols-4 gap-2 text-center">
         <div className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
           <div className="text-[10px] text-neutral-400 font-mono uppercase">Активны</div>
           <div className="text-base font-bold text-blue-400 font-mono mt-0.5">
@@ -207,7 +207,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
       {/* Tasks List */}
       <div className="space-y-2.5">
         {filteredTasks.length === 0 ? (
-          <div className="apple-group-card p-8 text-center space-y-3">
+          <div className="liquid-glass-card p-8 text-center space-y-3">
             <Layers className="w-10 h-10 text-neutral-500 mx-auto" />
             <h4 className="text-[15px] font-semibold text-white">
               {tasks.length === 0 ? 'Задач пока нет' : 'Нет задач в данной категории'}
@@ -242,7 +242,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   triggerHaptic('light');
                   onSelectTask(task);
                 }}
-                className="apple-group-card p-4 cursor-pointer hover:bg-white/[0.05] transition-all space-y-3 active:scale-[0.99]"
+                className="liquid-glass-card p-4 cursor-pointer hover:bg-white/[0.05] transition-all space-y-3 active:scale-[0.99]"
               >
                 {/* Header row */}
                 <div className="flex items-center justify-between">

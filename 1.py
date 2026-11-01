@@ -596,13 +596,14 @@ async def create_cryptobot_invoice(amount_usd: float, description: str) -> dict:
     headers = {"Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN}
     payload = {
         "asset": "USDT",
-        "amount": str(amount_usd),
-        "description": description,
+        "amount": str(round(float(amount_usd), 2)),
+        "description": description[:1024],
         "paid_btn_name": "openBot",
-        "paid_btn_url": "https://t.me/"
+        "paid_btn_url": f"https://t.me/{BOT_USERNAME}"
     }
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, json=payload, headers=headers) as resp:
                 data = await resp.json()
                 if data.get("ok"):
@@ -1028,17 +1029,90 @@ def parse_chat_links(links: list[str]) -> list[dict]:
             result.append({"id": 0, "username": clean_target, "title": clean_target})
     return result
 
-async def _send_one(client, target, text, media, reply_to=None):
-    if media and os.path.exists(media):
-        if reply_to:
-            await client.send_file(target, media, caption=text, reply_to=reply_to)
-        else:
-            await client.send_file(target, media, caption=text)
+async def _send_one(client: TelegramClient, target, text: str, media=None, reply_to=None):
+    """
+    Умная отправка в канал или группу с автоматическим вступлением,
+    поиском группы обсуждений/комментариев для каналов (чтобы не было ChatWriteForbiddenError),
+    фоллбэком на текст при запрете медиа и безопасной обработкой SlowMode.
+    """
+    target_entity = target
+
+    # 1. Если передана ссылка-приглашение (+hash или joinchat/hash)
+    if isinstance(target, str):
+        raw_target = target.strip()
+        if "+" in raw_target or "joinchat" in raw_target:
+            hash_str = raw_target.split("+")[-1].split("joinchat/")[-1]
+            try:
+                await client(functions.messages.ImportChatInviteRequest(hash=hash_str))
+                log.info(f"Вступили по инвайт-ссылке {hash_str}")
+            except Exception as inv_ex:
+                log.debug(f"Инвайт-запрос {hash_str}: {inv_ex}")
+
+    # 2. Разрешаем сущность Telegram
+    try:
+        target_entity = await client.get_entity(target)
+    except Exception as ent_ex:
+        log.debug(f"Не удалось получить entity для {target}: {ent_ex}")
+        target_entity = target
+
+    # 3. Проверка на канал vs группу
+    is_channel = hasattr(target_entity, 'broadcast')
+    if is_channel and getattr(target_entity, 'broadcast', False):
+        # Это широковещательный канал (broadcast): обычные подписчики не могут писать напрямую в канал.
+        # Ищем привязанную группу обсуждений (linked discussion chat / комментарии к постам)
+        try:
+            full = await client(functions.channels.GetFullChannelRequest(target_entity))
+            if full.full_chat and getattr(full.full_chat, 'linked_chat_id', None):
+                linked_id = full.full_chat.linked_chat_id
+                discussion_group = await client.get_entity(linked_id)
+                # Вступаем в группу обсуждений канала, если еще не вступили
+                try:
+                    await client(functions.channels.JoinChannelRequest(discussion_group))
+                except Exception:
+                    pass
+                target_entity = discussion_group
+                log.info(f"Для канала {target} найдена группа обсуждений #{linked_id}, отправляем в неё")
+            else:
+                # Канал без комментариев: подписываемся на канал
+                try:
+                    await client(functions.channels.JoinChannelRequest(target_entity))
+                except Exception:
+                    pass
+        except Exception as full_ex:
+            log.debug(f"GetFullChannelRequest notice: {full_ex}")
     else:
-        if reply_to:
-            await client.send_message(target, text, reply_to=reply_to)
+        # Обычная группа или супергруппа: автоматически вступаем, если еще не состоим
+        try:
+            await client(functions.channels.JoinChannelRequest(target_entity))
+        except Exception:
+            pass
+
+    # 4. Отправка сообщения с фоллбэком при запрете медиа в чате
+    try:
+        if media and os.path.exists(media):
+            try:
+                if reply_to:
+                    return await client.send_file(target_entity, media, caption=text, reply_to=reply_to)
+                else:
+                    return await client.send_file(target_entity, media, caption=text)
+            except Exception as media_err:
+                log.warning(f"Медиа не разрешено в чате ({media_err}), отправляем текстом...")
+                if reply_to:
+                    return await client.send_message(target_entity, text, reply_to=reply_to)
+                else:
+                    return await client.send_message(target_entity, text)
         else:
-            await client.send_message(target, text)
+            if reply_to:
+                return await client.send_message(target_entity, text, reply_to=reply_to)
+            else:
+                return await client.send_message(target_entity, text)
+    except SlowModeWaitError as sm:
+        log.warning(f"SlowMode: ожидание {sm.seconds} сек...")
+        await asyncio.sleep(min(sm.seconds, 20))
+        if reply_to:
+            return await client.send_message(target_entity, text, reply_to=reply_to)
+        else:
+            return await client.send_message(target_entity, text)
 
 async def solve_pr_bot_challenge(client: TelegramClient, chat_target):
     """
@@ -1394,7 +1468,6 @@ def task_action_keyboard(task_id: int):
 def sub_keyboard():
     return [
         [styled_btn("🚀 Тариф Pro (от 1 до 90 дн.)", b"sub_choose_pro", style="primary")],
-        [styled_btn("💎 Тариф Premium+ (от 1 до 90 дн.)", b"sub_choose_premium", style="primary")],
         [styled_btn("🔙 Главное меню", b"main_menu")]
     ]
 
@@ -1460,8 +1533,10 @@ def profile_text(user_id: int) -> str:
     accs = db_get_user_accounts(user_id)
     tasks = db_get_user_tasks(user_id)
     bonus = u.get("bonus_messages", 0)
+    tokens = u.get("tokens_balance", 500)
+    ratio = plan.get("token_ratio", 1)
 
-    expires_str = "Бессрочно (Free)"
+    expires_str = "Бессрочно (Start)"
     if u["sub_expires_at"] > 0:
         rem_sec = u["sub_expires_at"] - int(time.time())
         if rem_sec > 0:
@@ -1474,40 +1549,42 @@ def profile_text(user_id: int) -> str:
     sent_today = u["free_limit_used"] if plan_key == "free" else u["daily_sent"]
     total_allowed = plan['daily_limit'] + bonus
     limit_str = f"{sent_today} / {total_allowed}"
+    rem_limit = max(0, total_allowed - sent_today)
 
-    bonus_str = f"\n🎁 Бонусных сообщений за рефералов: `{bonus}`" if bonus > 0 else ""
+    ar_status = "Включен 🟢" if u.get("ar_enabled", 1) else "Выключен ⚪"
+    ar_replies = u.get("ar_replies_count", 0)
 
     return (
         f"👤 **Личный кабинет**\n\n"
         f"🆔 ID: `{user_id}`\n"
-        f"⭐ Тариф: **{plan['name']}**\n"
-        f"⏱ Срок действия: {expires_str}\n"
-        f"📊 Отправлено сообщений: `{limit_str}`{bonus_str}\n\n"
-        f"📱 Подключено аккаунтов: `{len(accs)} / {plan['max_accounts']}`\n"
-        f"⚡ Мин. задержка: `{plan['min_delay']} сек`\n"
-        f"📨 Создано задач: `{len(tasks)}`"
+        f"⭐ Тариф: **{plan['name']}** ({expires_str})\n\n"
+        f"💰 **Балансы и ресурсы:**\n"
+        f"• 🪙 Токены BLX: `{tokens:,} BLX` ({ratio} сообщ. за токен)\n"
+        f"• 📊 Лимит на день: `{limit_str}` (осталось: `{rem_limit}`)\n"
+        f"• 🎁 Реферальные бонусы: `+{bonus}` сообщ.\n"
+        f"• 📱 Слоты аккаунтов: `{len(accs)} / {plan['max_accounts']}` шт.\n"
+        f"• ⚡ Мин. задержка: `{plan['min_delay']} сек`\n"
+        f"• 📨 Создано задач: `{len(tasks)}`\n"
+        f"• 🤖 Автоответчик в ЛС: `{ar_status}` (ответов: `{ar_replies}`)"
     )
 
 def referral_text(bot_username: str, user_id: int) -> str:
     u = db_get_or_create_user(user_id)
-    plan = SUBSCRIPTION_PLANS.get(u["sub_plan"], SUBSCRIPTION_PLANS["free"])
     stats = db_get_referral_stats(user_id)
     bot_name = bot_username or "bot"
     ref_link = f"https://t.me/{bot_name}?start=ref_{user_id}"
 
     return (
         f"👥 **Реферальная программа**\n\n"
-        f"Приглашайте других пользователей и получайте бесплатные сообщения к своему лимиту!\n\n"
+        f"Приглашайте друзей и получайте бонусные сообщения к своему лимиту!\n\n"
         f"🎯 **Ваша персональная ссылка:**\n`{ref_link}`\n\n"
-        f"💡 **Как начисляются бонусы:**\n"
-        f"Когда приглашённый пользователь переходит по вашей ссылке и успешно подключает свой первый аккаунт, вам мгновенно начисляются сообщения:\n"
-        f"• На тарифе Free: **+50 сообщений**\n"
-        f"• На тарифе Pro: **+100 сообщений**\n"
-        f"• На тарифе Premium+: **+230 сообщений**\n\n"
+        f"💡 **Награды за подключение аккаунта рефералом:**\n"
+        f"• На тарифе Start: **+50 сообщений**\n"
+        f"• На тарифе Pro: **+100 сообщений**\n\n"
         f"📊 **Ваша статистика:**\n"
         f"• Перешли по ссылке: `{stats['total_invited']}` чел.\n"
         f"• Подключили аккаунт: `{stats['active_invited']}` чел.\n"
-        f"• Получено бонусных сообщений: `+{stats['bonus_messages']}`"
+        f"• Начислено бонусов: `+{stats['bonus_messages']}` сообщ."
     )
 
 def task_detail_text(task: dict) -> str:

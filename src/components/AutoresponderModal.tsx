@@ -56,10 +56,12 @@ export const AutoresponderModal: React.FC<AutoresponderModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-xl animate-fade-in p-0 sm:p-4">
-      <div className="w-full sm:max-w-lg bg-[#14151a]/95 border-t sm:border border-white/[0.12] rounded-t-[28px] sm:rounded-[28px] max-h-[92vh] flex flex-col shadow-2xl overflow-hidden apple-liquid-sheet">
+      <div className="w-full sm:max-w-lg bg-[#14151a]/95 border-t sm:border border-white/[0.12] rounded-t-[28px] sm:rounded-[28px] max-h-[92vh] flex flex-col shadow-2xl overflow-hidden apple-liquid-sheet animate-sheet-spring">
+        {/* Grab Handle for bottom sheet */}
+        <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto mt-2 -mb-1 sm:hidden" />
         
         {/* iOS Header */}
-        <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/[0.08] flex-shrink-0">
+        <div className="px-5 pt-3 pb-3 flex items-center justify-between border-b border-white/[0.08] flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
               <MessageSquareQuote className="w-4 h-4" />

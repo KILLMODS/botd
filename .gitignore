@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.session
+*.session-journal
+*.log
+
+# Environment & Local
+.env
+.env.local
+.env.*.local
+.DS_Store
+
+# AI Studio Internal
+.aistudio/
